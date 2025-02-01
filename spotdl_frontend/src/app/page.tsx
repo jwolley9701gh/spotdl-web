@@ -5,21 +5,35 @@ import axios from 'axios';
 
 export default function Home() {
   const [url, setUrl] = useState<string>('');
+  const [generateLrc, setGenerateLrc] = useState<boolean>(true); // Default to True
+  const [zipName, setZipName] = useState<string>('out'); // Default to 'out'
   const [message, setMessage] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
   const [fileUrl, setFileUrl] = useState<string>('');
+  const [stdout, setStdout] = useState<string>('');
+  const [stderr, setStderr] = useState<string>('');
 
   const handleDownload = async (e: FormEvent) => {
     e.preventDefault();
     setMessage('Downloading...');
     setProgress(0);
     setFileUrl('');
+    setStdout('');
+    setStderr('');
 
     try {
-      const response = await axios.post<{ message: string; file_url: string }>(
+      const response = await axios.post<{
+        message: string;
+        file_url: string;
+        stdout: string;
+        stderr: string;
+      }>(
         'http://localhost:8000/api/download/',
-        { url },
+        { url, generate_lrc: generateLrc, zip_name: zipName }, // Send zip_name
         {
+          headers: {
+            'Content-Type': 'application/json', // Ensure JSON content type
+          },
           onDownloadProgress: (progressEvent) => {
             const percentCompleted = Math.round(
               (progressEvent.loaded * 100) / (progressEvent.total || 1)
@@ -30,8 +44,12 @@ export default function Home() {
       );
       setMessage(response.data.message);
       setFileUrl(response.data.file_url);
+      setStdout(response.data.stdout); // Display stdout
+      setStderr(response.data.stderr); // Display stderr
     } catch (error: any) {
       setMessage(error.response?.data?.error || 'An error occurred');
+      setStdout(error.response?.data?.stdout || ''); // Display stdout from error
+      setStderr(error.response?.data?.stderr || ''); // Display stderr from error
     }
   };
 
@@ -47,6 +65,25 @@ export default function Home() {
             onChange={(e) => setUrl(e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
+          />
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="generate-lrc"
+              checked={generateLrc}
+              onChange={(e) => setGenerateLrc(e.target.checked)}
+              className="mr-2"
+            />
+            <label htmlFor="generate-lrc" className="text-sm">
+              Include synced lyrics (LRC)
+            </label>
+          </div>
+          <input
+            type="text"
+            placeholder="Enter zip file name (default: out)"
+            value={zipName}
+            onChange={(e) => setZipName(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="submit"
@@ -74,8 +111,20 @@ export default function Home() {
               download
               className="text-blue-500 hover:underline"
             >
-              Download {fileUrl.includes('.zip') ? 'Playlist' : 'Song'}
+              Download {fileUrl.includes('.zip') ? 'Zip File' : 'Song'}
             </a>
+          </div>
+        )}
+        {stdout && (
+          <div className="mt-4">
+            <h2 className="text-lg font-bold">Output:</h2>
+            <pre className="bg-gray-100 p-2 rounded-md text-sm">{stdout}</pre>
+          </div>
+        )}
+        {stderr && (
+          <div className="mt-4">
+            <h2 className="text-lg font-bold">Errors:</h2>
+            <pre className="bg-red-100 p-2 rounded-md text-sm text-red-600">{stderr}</pre>
           </div>
         )}
       </div>
