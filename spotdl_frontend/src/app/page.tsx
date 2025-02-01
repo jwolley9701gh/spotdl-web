@@ -30,11 +30,11 @@ export default function Home() {
         stdout: string;
         stderr: string;
       }>(
-        'http://localhost:8000/api/download/',
-        { url, generate_lrc: generateLrc, dir_name: dirName }, // Send dir_name
+        `${process.env.NEXT_PUBLIC_API_URL}/api/download/`, // Use environment variable
+        { url, generate_lrc: generateLrc, dir_name: dirName },
         {
           headers: {
-            'Content-Type': 'application/json', // Ensure JSON content type
+            'Content-Type': 'application/json',
           },
           onDownloadProgress: (progressEvent) => {
             const percentCompleted = Math.round(
@@ -144,7 +144,7 @@ export default function Home() {
         {fileUrl && (
           <div className="mt-4 text-center">
             <a
-              href={`https://spotdl-web.onrender.com${fileUrl}`}
+              href={`${process.env.NEXT_PUBLIC_API_URL}${fileUrl}`} // Use environment variable
               download
               className="text-blue-500 hover:underline"
             >
