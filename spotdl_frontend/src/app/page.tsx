@@ -1,7 +1,7 @@
 'use client'; // Mark this as a Client Component
 
 import { useState, FormEvent } from 'react';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 export default function Home() {
   const [url, setUrl] = useState<string>('');
@@ -48,10 +48,14 @@ export default function Home() {
       setFileUrl(response.data.file_url);
       setStdout(response.data.stdout); // Display stdout
       setStderr(response.data.stderr); // Display stderr
-    } catch (error: any) {
-      setMessage(error.response?.data?.error || 'An error occurred');
-      setStdout(error.response?.data?.stdout || ''); // Display stdout from error
-      setStderr(error.response?.data?.stderr || ''); // Display stderr from error
+    } catch (error: unknown) {
+      if (error instanceof AxiosError) {
+        setMessage(error.response?.data?.error || 'An error occurred');
+        setStdout(error.response?.data?.stdout || ''); // Display stdout from error
+        setStderr(error.response?.data?.stderr || ''); // Display stderr from error
+      } else {
+        setMessage('An unexpected error occurred');
+      }
     } finally {
       setIsLoading(false); // Stop loading
       setUrl(''); // Reset URL field
@@ -140,7 +144,7 @@ export default function Home() {
         {fileUrl && (
           <div className="mt-4 text-center">
             <a
-              href={`http://localhost:8000${fileUrl}`}
+              href={`https://spotdl-web.onrender.com${fileUrl}`}
               download
               className="text-blue-500 hover:underline"
             >
