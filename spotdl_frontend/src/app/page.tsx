@@ -130,7 +130,7 @@ export default function Home() {
           </button>
         </form>
         {message && <p className="mt-4 text-center text-black">{message}</p>}
-        {progress > 0 && (
+        {/* {progress > 0 && (
           <div className="mt-4">
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               <div
@@ -140,7 +140,7 @@ export default function Home() {
             </div>
             <p className="text-center mt-2 text-gray-400">{progress}%</p>
           </div>
-        )}
+        )} */}
         {fileUrl && (
           <div className="mt-4 text-center">
             <a
