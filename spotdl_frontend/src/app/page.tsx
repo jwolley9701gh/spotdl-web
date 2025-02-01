@@ -6,7 +6,7 @@ import axios from 'axios';
 export default function Home() {
   const [url, setUrl] = useState<string>('');
   const [generateLrc, setGenerateLrc] = useState<boolean>(true); // Default to True
-  const [zipName, setZipName] = useState<string>('out'); // Default to 'out'
+  const [dirName, setDirName] = useState<string>('out'); // Default to 'out'
   const [message, setMessage] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
   const [fileUrl, setFileUrl] = useState<string>('');
@@ -29,7 +29,7 @@ export default function Home() {
         stderr: string;
       }>(
         'http://localhost:8000/api/download/',
-        { url, generate_lrc: generateLrc, zip_name: zipName }, // Send zip_name
+        { url, generate_lrc: generateLrc, dir_name: dirName }, // Send dir_name
         {
           headers: {
             'Content-Type': 'application/json', // Ensure JSON content type
@@ -80,9 +80,9 @@ export default function Home() {
           </div>
           <input
             type="text"
-            placeholder="Enter zip file name (default: out)"
-            value={zipName}
-            onChange={(e) => setZipName(e.target.value)}
+            placeholder="Enter directory name (default: out)"
+            value={dirName}
+            onChange={(e) => setDirName(e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -115,16 +115,24 @@ export default function Home() {
             </a>
           </div>
         )}
-        {stdout && (
-          <div className="mt-4">
-            <h2 className="text-lg font-bold">Output:</h2>
-            <pre className="bg-gray-100 p-2 rounded-md text-sm">{stdout}</pre>
-          </div>
-        )}
-        {stderr && (
-          <div className="mt-4">
-            <h2 className="text-lg font-bold">Errors:</h2>
-            <pre className="bg-red-100 p-2 rounded-md text-sm text-red-600">{stderr}</pre>
+        {(stdout || stderr) && (
+          <div className="mt-4 space-y-4">
+            {stdout && (
+              <div>
+                <h2 className="text-lg font-bold">Output:</h2>
+                <pre className="bg-gray-100 p-2 rounded-md text-sm max-h-40 overflow-y-auto">
+                  {stdout}
+                </pre>
+              </div>
+            )}
+            {stderr && (
+              <div>
+                <h2 className="text-lg font-bold">Errors:</h2>
+                <pre className="bg-red-100 p-2 rounded-md text-sm text-red-600 max-h-40 overflow-y-auto">
+                  {stderr}
+                </pre>
+              </div>
+            )}
           </div>
         )}
       </div>

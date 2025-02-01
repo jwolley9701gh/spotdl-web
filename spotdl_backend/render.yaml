@@ -1,0 +1,11 @@
+services:
+  - name: spotdl-backend
+    type: web
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn yt_downloader.wsgi:application"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true

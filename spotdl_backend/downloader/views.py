@@ -12,24 +12,42 @@ from django.conf import settings
 def download_song(request: HttpRequest) -> JsonResponse:
     if request.method == "POST":
         try:
+            # Empty the MEDIA_ROOT directory
+            for item in os.listdir(settings.MEDIA_ROOT):
+                item_path = os.path.join(settings.MEDIA_ROOT, item)
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    os.unlink(item_path)  # Delete files and links
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)  # Delete directories
+
             # Parse the request body as JSON
             data: Dict[str, Any] = json.loads(request.body)
             url: str = data.get("url")
             generate_lrc: bool = data.get("generate_lrc", True)  # Default to True
-            zip_name: str = data.get("zip_name", "out")  # Default to 'out.zip'
+            dir_name: str = data.get("dir_name", "out")  # Default to 'out'
 
             if not url:
                 return JsonResponse({"error": "URL is required"}, status=400)
+
+            # Create the directory inside MEDIA_ROOT
+            dir_path = os.path.join(settings.MEDIA_ROOT, dir_name)
+
+            # If the directory already exists, delete it
+            if os.path.exists(dir_path):
+                shutil.rmtree(dir_path)
+
+            # Create the directory
+            os.makedirs(dir_path, exist_ok=True)
 
             # Build the spotdl command
             command = ["spotdl", "download", url]
             if generate_lrc:
                 command.append("--generate-lrc")
 
-            # Call spotdl to download the track or playlist
+            # Call spotdl to download the track or playlist into the new directory
             result = subprocess.run(
                 command,
-                cwd=settings.MEDIA_ROOT,  # Download files to the media directory
+                cwd=dir_path,  # Run the command inside the new directory
                 capture_output=True,
                 text=True,
             )
@@ -44,16 +62,14 @@ def download_song(request: HttpRequest) -> JsonResponse:
                     status=500,
                 )
 
-            # Zip the entire MEDIA_ROOT directory
-            zip_path = os.path.join(settings.MEDIA_ROOT, f"{zip_name}.zip")
-            shutil.make_archive(
-                zip_path.replace(".zip", ""), "zip", settings.MEDIA_ROOT
-            )
+            # Zip the contents of the directory
+            zip_path = os.path.join(settings.MEDIA_ROOT, f"{dir_name}.zip")
+            shutil.make_archive(zip_path.replace(".zip", ""), "zip", dir_path)
 
             return JsonResponse(
                 {
                     "message": "Download and zip completed successfully",
-                    "file_url": f"/media/{zip_name}.zip",
+                    "file_url": f"/media/{dir_name}.zip",
                     "stdout": result.stdout,  # Include stdout in the response
                     "stderr": result.stderr,  # Include stderr in the response
                 }
