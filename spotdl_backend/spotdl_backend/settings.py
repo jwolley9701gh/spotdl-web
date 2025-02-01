@@ -141,5 +141,9 @@ CORS_ALLOWED_ORIGINS = [
 # Media download settings
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+# Create MEDIA_ROOT if it doesn't exist
+if not os.path.exists(MEDIA_ROOT):
+    os.makedirs(MEDIA_ROOT)
+
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
