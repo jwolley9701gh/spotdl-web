@@ -1,11 +1,15 @@
 services:
-  - name: spotdl-backend
-    type: web
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn yt_downloader.wsgi:application"
+  - type: web
+    name: spotdl-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn spotdl_backend.wsgi:application
     envVars:
-      - key: DATABASE_URL
-        sync: false
+      - key: DEBUG
+        value: "False"
       - key: SECRET_KEY
         generateValue: true
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: DATABASE_URL
+        value: "postgres://user:password@host:port/dbname" # Replace with your PostgreSQL URL
