@@ -2,14 +2,14 @@
 
 import { useState, FormEvent } from 'react';
 import axios, { AxiosError } from 'axios';
-import { dir } from 'console';
+// import { dir } from 'console';
 
 export default function Home() {
   const [url, setUrl] = useState<string>('');
   const [generateLrc, setGenerateLrc] = useState<boolean>(true); // Default to True
   const [dirName, setDirName] = useState<string>('out'); // Default to 'out'
   const [message, setMessage] = useState<string>('');
-  const [progress, setProgress] = useState<number>(0);
+  // const [progress, setProgress] = useState<number>(0);
   const [fileUrl, setFileUrl] = useState<string>('');
   const [stdout, setStdout] = useState<string>('');
   const [stderr, setStderr] = useState<string>('');
@@ -19,7 +19,7 @@ export default function Home() {
     e.preventDefault();
     setMessage(`File(s) will be zipped into ${dirName}.zip`);
     setIsLoading(true); // Start loading
-    setProgress(0);
+    // setProgress(0);
     setFileUrl('');
     setStdout('');
     setStderr('');
@@ -41,7 +41,7 @@ export default function Home() {
             const percentCompleted = Math.round(
               (progressEvent.loaded * 100) / (progressEvent.total || 1)
             );
-            setProgress(percentCompleted);
+            // setProgress(percentCompleted);
           },
         }
       );
