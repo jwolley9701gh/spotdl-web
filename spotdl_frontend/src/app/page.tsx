@@ -37,12 +37,12 @@ export default function Home() {
           headers: {
             'Content-Type': 'application/json',
           },
-          onDownloadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total || 1)
-            );
-            // setProgress(percentCompleted);
-          },
+          // onDownloadProgress: (progressEvent) => {
+          //   const percentCompleted = Math.round(
+          //     (progressEvent.loaded * 100) / (progressEvent.total || 1)
+          //   );
+          //   setProgress(percentCompleted);
+          // },
         }
       );
       setMessage(response.data.message);
