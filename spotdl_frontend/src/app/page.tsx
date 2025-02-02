@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import axios, { AxiosError } from 'axios';
+import { dir } from 'console';
 
 export default function Home() {
   const [url, setUrl] = useState<string>('');
@@ -16,7 +17,7 @@ export default function Home() {
 
   const handleDownload = async (e: FormEvent) => {
     e.preventDefault();
-    setMessage(`Downloading into ${dirName}...`);
+    setMessage(`File(s) will be zipped into ${dirName}.zip`);
     setIsLoading(true); // Start loading
     setProgress(0);
     setFileUrl('');
@@ -57,7 +58,10 @@ export default function Home() {
         setMessage('An unexpected error occurred');
       }
     } finally {
+      // TODO: receive a response from the server to show progress, deleting and downloading state
       setIsLoading(false); // Stop loading
+      // TODO: reset immediately after successful form submission, before start download
+      // TODO: use a better way to reset form fields
       setUrl(''); // Reset URL field
       setDirName('out'); // Reset directory name field
     }
@@ -148,7 +152,7 @@ export default function Home() {
               download
               className="text-blue-500 hover:underline"
             >
-              Download {fileUrl.includes('.zip') ? 'Zip File' : 'Song'}
+              Download {dirName}.zip
             </a>
           </div>
         )}
