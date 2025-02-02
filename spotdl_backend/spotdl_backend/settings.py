@@ -12,12 +12,16 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
-from decouple import config  # Install python-decouple for environment variables
+from decouple import (
+    Config,
+    RepositoryEnv,
+)  # Install python-decouple for environment variables
 import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+DOTENV_FILE = BASE_DIR / "be-dev.env"
+config = Config(RepositoryEnv(DOTENV_FILE))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -147,3 +151,5 @@ if not os.path.exists(MEDIA_ROOT):
 
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+if not os.path.exists(STATIC_ROOT):
+    os.makedirs(STATIC_ROOT)

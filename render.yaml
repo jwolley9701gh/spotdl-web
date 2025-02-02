@@ -2,7 +2,11 @@ services:
   - type: web
     name: spotdl-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      apt-get update
+      apt-get install -y ffmpeg
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
     startCommand: gunicorn spotdl_backend.wsgi:application
     envVars:
       - key: DEBUG
