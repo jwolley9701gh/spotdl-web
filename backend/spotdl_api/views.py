@@ -10,17 +10,21 @@ import asyncio
 from spotdl.types.song import Song  # Import the Song class
 import nest_asyncio  # Import nest_asyncio
 import os
+from spotdl.types.options import DownloaderOptions
 
 # Get a logger instance
 logger = logging.getLogger("spotdl_api")
 
 nest_asyncio.apply()
 
+downloader_settings = {"log_level": "DEBUG"}
+
 # Initialize SpotDL
 spotdl = Spotdl(
     client_id=settings.SPOTIFY_CLIENT_ID,
     client_secret=settings.SPOTIFY_CLIENT_SECRET,
     loop=asyncio.get_event_loop(),
+    downloader_settings=DownloaderOptions(**downloader_settings),
 )
 
 
