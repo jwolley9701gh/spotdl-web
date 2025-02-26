@@ -7,14 +7,21 @@ export default function Home() {
   const [url, setUrl] = useState("");
   const [message, setMessage] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
   // Fetch the CSRF token when the component mounts
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/csrf/`, {
-          withCredentials: true,
-        });
+        const response = await axios.get(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/csrf/`,
+          {
+            withCredentials: true, // Include credentials (cookies)
+          }
+        );
+        const token = response.data.csrfToken; // Extract the token from the response body
+        setCsrfToken(token); // Store the token in state
+        console.log("CSRF Token fetched:", token);
       } catch (error) {
         console.error("Error fetching CSRF token:", error);
       }
@@ -22,36 +29,26 @@ export default function Home() {
     fetchCsrfToken();
   }, []);
 
-  // Fetch the CSRF token from the cookie
-  const getCsrfToken = () => {
-    const cookieValue = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("csrftoken="))
-      ?.split("=")[1];
-    return cookieValue;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form submitted"); // Add this line
     setMessage("Downloading...");
     setDownloadUrl("");
-    console.log("Backend URL:", process.env.NEXT_PUBLIC_BACKEND_URL);
+
+    if (!csrfToken) {
+      setMessage("CSRF token not found");
+      return;
+    }
 
     try {
-      const csrfToken = getCsrfToken();
-      if (!csrfToken) {
-        throw new Error("CSRF token not found");
-      }
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download/`,
         { url: url },
         {
           headers: {
-            "X-CSRFToken": csrfToken,
+            "X-CSRFToken": csrfToken, // Include the CSRF token in the headers
             "Content-Type": "application/json",
           },
-          withCredentials: true,
+          withCredentials: true, // Include credentials (cookies)
         }
       );
       setMessage(response.data.message);

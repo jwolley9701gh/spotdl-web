@@ -26,9 +26,8 @@ spotdl = Spotdl(
 
 @ensure_csrf_cookie
 def csrf(request):
-    # Ensure the CSRF token is set in the response cookie
-    get_token(request)
-    return JsonResponse({"message": "CSRF cookie set"})
+    csrf_token = get_token(request)
+    return JsonResponse({"csrfToken": csrf_token})
 
 
 def clear_media_directory():
