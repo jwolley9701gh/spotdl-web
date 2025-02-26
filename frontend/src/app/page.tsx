@@ -33,6 +33,11 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Form submitted"); // Add this line
+    setMessage("Downloading...");
+    setDownloadUrl("");
+    console.log("Backend URL:", process.env.NEXT_PUBLIC_BACKEND_URL);
+
     try {
       const csrfToken = getCsrfToken();
       if (!csrfToken) {
