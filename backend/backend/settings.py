@@ -144,7 +144,7 @@ SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Allow requests from the front end
-    "https://spotdl-web.vercel.app/",  # Production frontend
+    "https://spotdl-web.vercel.app",  # Production frontend
 ]
 
 # Optionally, allow credentials (cookies, authorization headers, etc.)
@@ -152,7 +152,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",  # Local development frontend
-    "https://spotdl-web.vercel.app/",  # Production frontend
+    "https://spotdl-web.vercel.app",  # Production frontend
 ]
 
 CSRF_COOKIE_SAMESITE = "None"
