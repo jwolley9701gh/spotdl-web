@@ -25,7 +25,6 @@ spotdl = Spotdl(
     client_secret=settings.SPOTIFY_CLIENT_SECRET,
     loop=asyncio.get_event_loop(),
     downloader_settings=DownloaderOptions(**downloader_settings),
-    headless=True,
 )
 
 
