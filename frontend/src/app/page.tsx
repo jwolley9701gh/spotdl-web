@@ -6,13 +6,15 @@ import axios from "axios";
 export default function Home() {
   const [url, setUrl] = useState("");
   const [message, setMessage] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState(""); // State to store the download URL
+  const [downloadUrl, setDownloadUrl] = useState("");
 
   // Fetch the CSRF token when the component mounts
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        await axios.get("http://localhost:8000/api/csrf/", { withCredentials: true });
+        await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/csrf/`, {
+          withCredentials: true,
+        });
       } catch (error) {
         console.error("Error fetching CSRF token:", error);
       }
@@ -37,25 +39,25 @@ export default function Home() {
         throw new Error("CSRF token not found");
       }
       const response = await axios.post(
-        "http://localhost:8000/api/download/",
-        { url: url },  // Send the URL as JSON
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download/`,
+        { url: url },
         {
           headers: {
             "X-CSRFToken": csrfToken,
-            "Content-Type": "application/json",  // Ensure this header is set
+            "Content-Type": "application/json",
           },
           withCredentials: true,
         }
       );
       setMessage(response.data.message);
-      setDownloadUrl(response.data.download_url); // Set the download URL from the response
+      setDownloadUrl(response.data.download_url);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         setMessage(error.response?.data?.error || "An error occurred");
       } else {
         setMessage("An unexpected error occurred");
       }
-      setDownloadUrl(""); // Clear the download URL in case of an error
+      setDownloadUrl("");
     }
   };
 
@@ -83,7 +85,7 @@ export default function Home() {
         <div className="mt-4">
           <p className="text-blue-600">Download your song:</p>
           <a
-            href={`http://localhost:8000${downloadUrl}`}
+            href={`${process.env.NEXT_PUBLIC_BACKEND_URL}${downloadUrl}`}
             download
             className="text-blue-500 underline"
           >

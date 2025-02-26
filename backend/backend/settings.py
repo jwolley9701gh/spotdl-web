@@ -142,20 +142,26 @@ SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Allow requests from the front end
+    "https://spotdl-web.vercel.app",  # Production frontend
 ]
 
 # Optionally, allow credentials (cookies, authorization headers, etc.)
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://spotdl-web.vercel.app",  # Production frontend
     "http://localhost:3000",  # Local development frontend
+    "https://spotdl-web.vercel.app",  # Production frontend
 ]
 
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+if not os.path.exists(MEDIA_ROOT):
+    os.makedirs(MEDIA_ROOT)
 
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
 
 LOGGING = {
     "version": 1,
@@ -179,7 +185,7 @@ LOGGING = {
         "file": {
             "level": "INFO",
             "class": "logging.FileHandler",
-            "filename": os.path.join(BASE_DIR, "logs/django.log"),  # Log file location
+            "filename": os.path.join(LOG_DIR, "django.log"),  # Log file location
             "formatter": "verbose",
         },
     },
