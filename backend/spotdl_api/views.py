@@ -16,10 +16,8 @@ from spotdl.utils.config import DEFAULT_CONFIG, DOWNLOADER_OPTIONS
 # Get a logger instance
 logger = logging.getLogger("spotdl_api")
 
-# nest_asyncio.apply()
-# Initialize event loop
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
+nest_asyncio.apply()
+
 
 # downloader_settings = {"log_level": "DEBUG"}
 
@@ -39,8 +37,11 @@ downloader_settings["log_level"] = "DEBUG"
 spotdl = Spotdl(
     client_id=DEFAULT_CONFIG["client_id"],
     client_secret=DEFAULT_CONFIG["client_secret"],
+    user_auth=DEFAULT_CONFIG["user_auth"],
+    cache_path=DEFAULT_CONFIG["cache_path"],
+    no_cache=True,
+    headless=DEFAULT_CONFIG["headless"],
     downloader_settings=downloader_settings,
-    loop=asyncio.get_event_loop(),
 )
 
 
@@ -67,10 +68,11 @@ def clear_media_directory():
                 logger.error(f"Failed to delete {file_path}. Reason: {e}")
 
 
-def download_song(request):  # Removed async since we're handling loop differently
+async def download_song(request):
     try:
+        # Parse JSON data from the request body
         data = json.loads(request.body)
-        url = data.get("url")
+        url = data.get("url")  # Extract the URL from the JSON data
     except json.JSONDecodeError:
         logger.error("Invalid JSON data in request")
         return JsonResponse({"error": "Invalid JSON data"}, status=400)
@@ -84,59 +86,39 @@ def download_song(request):  # Removed async since we're handling loop different
     try:
         logger.info(f"Attempting to download song from URL: {url}")
 
-        # Get song info first
+        # Create a Song object from the URL
         song = Song.from_url(url)
-        song_dict = song.json if song else None
 
-        try:
-            # Run the download in the event loop
-            result = loop.run_until_complete(loop.create_task(spotdl.download(song)))
+        # Call the asynchronous download_song method directly
+        downloader = spotdl.downloader
+        result = downloader.download_song(song)
+        logger.info(f"Song downloaded successfully: {result}")
 
-            if result and result[1]:
-                file_path = str(result[1])
+        # Convert the Song object to a dictionary using the `json` property
+        song_dict = result[0].json if result[0] else None
+        file_path = str(result[1]) if result[1] else None
 
-                # Clear the media directory before moving the new file
-                clear_media_directory()
+        # Clear the media directory before moving the new file
+        clear_media_directory()
 
-                # Move the file to the media directory
-                file_name = os.path.basename(file_path)
-                media_file_path = os.path.join(settings.MEDIA_ROOT, file_name)
-                os.rename(file_path, media_file_path)
+        # Move the file to the media directory
+        if file_path:
+            file_name = os.path.basename(file_path)
+            media_file_path = os.path.join(settings.MEDIA_ROOT, file_name)
+            os.rename(file_path, media_file_path)
 
-                download_url = f"{settings.MEDIA_URL}{file_name}"
+            # Generate the download URL
+            download_url = f"{settings.MEDIA_URL}{file_name}"
+        else:
+            download_url = None
 
-                logger.info(f"Song downloaded successfully: {result}")
-                return JsonResponse(
-                    {
-                        "message": "Song downloaded successfully",
-                        "song": song_dict,
-                        "download_url": download_url,
-                    }
-                )
-
-            logger.error("Download failed - no file path returned")
-            return JsonResponse(
-                {
-                    "error": "Failed to download the song",
-                    "song": song_dict,
-                    "details": "No file path was returned from the download process",
-                },
-                status=503,
-            )
-
-        except Exception as download_error:
-            logger.error(f"Download error: {str(download_error)}", exc_info=True)
-            return JsonResponse(
-                {
-                    "error": "Download failed",
-                    "song": song_dict,
-                    "details": str(download_error),
-                },
-                status=503,
-            )
-
-    except Exception as e:
-        logger.error(f"Error processing song: {str(e)}", exc_info=True)
         return JsonResponse(
-            {"error": "Failed to process the song", "details": str(e)}, status=500
+            {
+                "message": "Song downloaded successfully",
+                "song": song_dict,
+                "download_url": download_url,
+            }
         )
+    except Exception as e:
+        logger.error(f"Error downloading song: {str(e)}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
