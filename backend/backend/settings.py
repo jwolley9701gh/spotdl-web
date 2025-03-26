@@ -52,10 +52,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -155,11 +155,21 @@ CSRF_TRUSTED_ORIGINS = [
     "https://spotdl-web.vercel.app",  # Production frontend
 ]
 
-CSRF_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SAMESITE = "None"
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SAMESITE = "None"
+# SESSION_COOKIE_SAMESITE = "None"
+# CSRF_COOKIE_SECURE = True
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript to access the cookie
+
+
+# CSRF and Session Settings
+CSRF_COOKIE_SAMESITE = None  # Use None instead of "None"
+SESSION_COOKIE_SAMESITE = None  # Use None instead of "None"
+CSRF_COOKIE_SECURE = False  # Set to False for localhost
+SESSION_COOKIE_SECURE = False  # Set to False for localhost
 CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript to access the cookie
+CSRF_USE_SESSIONS = False  # Store CSRF token in cookie instead of session
+CSRF_COOKIE_NAME = "csrftoken"  # Explicitly set the cookie name
 
 
 MEDIA_URL = "/media/"
