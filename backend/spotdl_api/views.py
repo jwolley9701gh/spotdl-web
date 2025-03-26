@@ -11,37 +11,20 @@ from spotdl.types.song import Song  # Import the Song class
 import nest_asyncio  # Import nest_asyncio
 import os
 from spotdl.types.options import DownloaderOptions
-from spotdl.utils.config import DEFAULT_CONFIG, DOWNLOADER_OPTIONS
 
 # Get a logger instance
 logger = logging.getLogger("spotdl_api")
 
 nest_asyncio.apply()
 
-
-# downloader_settings = {"log_level": "DEBUG"}
-
-downloader_settings = DOWNLOADER_OPTIONS.copy()
-downloader_settings["log_level"] = "DEBUG"
+downloader_settings = {"log_level": "DEBUG"}
 
 # Initialize SpotDL
-# spotdl = Spotdl(
-#     # client_id=settings.SPOTIFY_CLIENT_ID,
-#     # client_secret=settings.SPOTIFY_CLIENT_SECRET,
-#     client_id=DEFAULT_CONFIG["client_id"],
-#     client_secret=DEFAULT_CONFIG["client_secret"],
-#     loop=asyncio.get_event_loop(),
-#     downloader_settings=DownloaderOptions(**downloader_settings),
-# )
-
 spotdl = Spotdl(
-    client_id=DEFAULT_CONFIG["client_id"],
-    client_secret=DEFAULT_CONFIG["client_secret"],
-    user_auth=DEFAULT_CONFIG["user_auth"],
-    cache_path=DEFAULT_CONFIG["cache_path"],
-    no_cache=True,
-    headless=DEFAULT_CONFIG["headless"],
-    downloader_settings=downloader_settings,
+    client_id=settings.SPOTIFY_CLIENT_ID,
+    client_secret=settings.SPOTIFY_CLIENT_SECRET,
+    loop=asyncio.get_event_loop(),
+    downloader_settings=DownloaderOptions(**downloader_settings),
 )
 
 
