@@ -161,6 +161,7 @@ CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript to access the cookie
 
+COOKIE_FILE = os.getenv("COOKIE_FILE", os.path.join(BASE_DIR, "cookies.txt"))
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")

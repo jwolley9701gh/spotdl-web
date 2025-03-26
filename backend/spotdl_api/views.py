@@ -11,13 +11,17 @@ from spotdl.types.song import Song  # Import the Song class
 import nest_asyncio  # Import nest_asyncio
 import os
 from spotdl.types.options import DownloaderOptions
+from django.views.decorators.http import require_http_methods
 
 # Get a logger instance
 logger = logging.getLogger("spotdl_api")
 
 nest_asyncio.apply()
 
-downloader_settings = {"log_level": "DEBUG"}
+downloader_settings = {
+    "log_level": "DEBUG",
+    "cookie_file": settings.COOKIE_FILE,  # Add the cookie file path
+}
 
 # Initialize SpotDL
 spotdl = Spotdl(
@@ -32,6 +36,30 @@ spotdl = Spotdl(
 def csrf(request):
     csrf_token = get_token(request)
     return JsonResponse({"csrfToken": csrf_token})
+
+
+@require_http_methods(["POST"])
+def upload_cookies(request):
+    """
+    Upload cookies for the downloader
+    """
+    try:
+        # Get the cookie data from request
+        cookie_data = request.FILES.get("cookie_file")
+
+        if not cookie_data:
+            return JsonResponse({"error": "No cookie file provided"}, status=400)
+
+        # Write the cookie file
+        with open(settings.COOKIE_FILE, "wb+") as cookie_file:
+            for chunk in cookie_data.chunks():
+                cookie_file.write(chunk)
+
+        return JsonResponse({"message": "Cookie file uploaded successfully"})
+
+    except Exception as e:
+        logger.error(f"Error uploading cookies: {str(e)}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 def clear_media_directory():

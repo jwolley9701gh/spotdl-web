@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
+import CookieUpload from "@/components/CookieUpload";
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -82,6 +83,7 @@ export default function Home() {
           Download
         </button>
       </form>
+      <CookieUpload />
       {message && <p className="mt-4 text-green-600">{message}</p>}
       {downloadUrl && (
         <div className="mt-4">
