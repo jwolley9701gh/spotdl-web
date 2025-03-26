@@ -38,6 +38,17 @@ def csrf(request):
     return JsonResponse({"csrfToken": csrf_token})
 
 
+@require_http_methods(["GET"])
+def check_cookie_status(request):
+    """Check if cookie file exists and is valid"""
+    try:
+        cookie_exists = os.path.exists(settings.COOKIE_FILE)
+        return JsonResponse({"has_cookies": cookie_exists})
+    except Exception as e:
+        logger.error(f"Error checking cookie status: {str(e)}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
 @require_http_methods(["POST"])
 def upload_cookies(request):
     """

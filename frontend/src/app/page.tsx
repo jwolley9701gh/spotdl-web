@@ -1,14 +1,16 @@
-"use client"; // Mark this as a Client Component
+"use client";
 
 import { useState, useEffect } from "react";
 import axios from "axios";
 import CookieUpload from "@/components/CookieUpload";
+import { useCookieStatus } from "@/hooks/useCookieStatus";
 
 export default function Home() {
   const [url, setUrl] = useState("");
   const [message, setMessage] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const { hasCookies, loading: cookieLoading } = useCookieStatus();
 
   // Fetch the CSRF token when the component mounts
   useEffect(() => {
@@ -17,12 +19,10 @@ export default function Home() {
         const response = await axios.get(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/csrf/`,
           {
-            withCredentials: true, // Include credentials (cookies)
+            withCredentials: true,
           }
         );
-        const token = response.data.csrfToken; // Extract the token from the response body
-        setCsrfToken(token); // Store the token in state
-        console.log("CSRF Token fetched:", token);
+        setCsrfToken(response.data.csrfToken);
       } catch (error) {
         console.error("Error fetching CSRF token:", error);
       }
@@ -32,6 +32,12 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!hasCookies) {
+      setMessage("Please upload a cookie file first");
+      return;
+    }
+
     setMessage("Downloading...");
     setDownloadUrl("");
 
@@ -43,15 +49,15 @@ export default function Home() {
     try {
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download/`,
-        { url: url },
+        { url },
         {
           headers: {
-            "X-CSRFToken": csrfToken, // Include the CSRF token in the headers
-            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
           },
-          withCredentials: true, // Include credentials (cookies)
+          withCredentials: true,
         }
       );
+
       setMessage(response.data.message);
       setDownloadUrl(response.data.download_url);
     } catch (error) {
@@ -78,13 +84,25 @@ export default function Home() {
         />
         <button
           type="submit"
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          disabled={!hasCookies || cookieLoading}
+          className={`px-4 py-2 text-white rounded ${!hasCookies || cookieLoading
+            ? 'bg-gray-400 cursor-not-allowed'
+            : 'bg-blue-500 hover:bg-blue-600'
+            }`}
         >
           Download
         </button>
       </form>
+
       <CookieUpload />
-      {message && <p className="mt-4 text-green-600">{message}</p>}
+
+      {message && (
+        <p className={`mt-4 ${message.includes('error') ? 'text-red-600' : 'text-green-600'
+          }`}>
+          {message}
+        </p>
+      )}
+
       {downloadUrl && (
         <div className="mt-4">
           <p className="text-blue-600">Download your song:</p>
