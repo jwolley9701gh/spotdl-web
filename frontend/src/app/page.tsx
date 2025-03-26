@@ -53,6 +53,7 @@ export default function Home() {
         {
           headers: {
             "X-CSRFToken": csrfToken,
+            'Content-Type': 'multipart/form-data',
           },
           withCredentials: true,
         }
