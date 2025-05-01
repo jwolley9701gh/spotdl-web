@@ -4,9 +4,10 @@ import { useCookieStatus } from '@/hooks/useCookieStatus';
 
 interface CookieUploadProps {
     onStatusChange?: (hasCookies: boolean) => void;
+    csrfToken: string | null;
 }
 
-const CookieUpload = ({ onStatusChange }: CookieUploadProps) => {
+const CookieUpload = ({ onStatusChange, csrfToken }: CookieUploadProps) => {
     const [file, setFile] = useState<File | null>(null);
     const [message, setMessage] = useState<string>('');
     const { hasCookies, loading, refreshStatus } = useCookieStatus();
@@ -23,19 +24,22 @@ const CookieUpload = ({ onStatusChange }: CookieUploadProps) => {
             return;
         }
 
+        if (!csrfToken) {
+            setMessage('CSRF token not available. Please try again.');
+            return;
+        }
+
         const formData = new FormData();
         formData.append('cookie_file', file);
 
         try {
-            const csrfToken = document.cookie.match(/csrftoken=([\w-]+)/)?.[1];
-
             await axios.post(
                 `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/upload-cookies/`,
                 formData,
                 {
                     headers: {
                         'X-CSRFToken': csrfToken,
-                        'Content-Type': 'multipart/form-data',
+                        // 'Content-Type': 'multipart/form-data',
                     },
                     withCredentials: true,
                 }
@@ -49,6 +53,7 @@ const CookieUpload = ({ onStatusChange }: CookieUploadProps) => {
             onStatusChange?.(true);
         } catch (error) {
             if (axios.isAxiosError(error)) {
+                console.error('Upload error details:', error.response?.data);
                 setMessage(error.response?.data?.error || 'Error uploading cookie file');
             } else {
                 setMessage('Error uploading cookie file');
@@ -78,12 +83,15 @@ const CookieUpload = ({ onStatusChange }: CookieUploadProps) => {
                     />
                     <button
                         onClick={handleUpload}
-                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        disabled={!csrfToken}
+                        className={`px-4 py-2 text-white rounded ${!csrfToken ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
+                            }`}
                     >
                         Upload
                     </button>
                     {message && (
-                        <p className="mt-2 text-sm text-gray-600">{message}</p>
+                        <p className={`mt-2 text-sm ${message.includes('success') ? 'text-green-600' : 'text-red-600'
+                            }`}>{message}</p>
                     )}
                 </>
             )}

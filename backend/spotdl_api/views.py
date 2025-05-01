@@ -21,6 +21,7 @@ nest_asyncio.apply()
 downloader_settings = {
     "log_level": "DEBUG",
     "cookie_file": settings.COOKIE_FILE,  # Add the cookie file path
+    "bitrate": "auto",
 }
 
 # Initialize SpotDL

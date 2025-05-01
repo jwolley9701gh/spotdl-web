@@ -10,7 +10,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
-  const { hasCookies, loading: cookieLoading } = useCookieStatus();
+  const { hasCookies, loading: cookieLoading, refreshStatus } = useCookieStatus();
 
   // Fetch the CSRF token when the component mounts
   useEffect(() => {
@@ -25,10 +25,15 @@ export default function Home() {
         setCsrfToken(response.data.csrfToken);
       } catch (error) {
         console.error("Error fetching CSRF token:", error);
+        setMessage("Failed to fetch CSRF token");
       }
     };
     fetchCsrfToken();
   }, []);
+
+  const handleCookieStatusChange = () => {
+    refreshStatus();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +58,7 @@ export default function Home() {
         {
           headers: {
             "X-CSRFToken": csrfToken,
-            'Content-Type': 'multipart/form-data',
+            'Content-Type': 'application/json',
           },
           withCredentials: true,
         }
@@ -85,8 +90,8 @@ export default function Home() {
         />
         <button
           type="submit"
-          disabled={!hasCookies || cookieLoading}
-          className={`px-4 py-2 text-white rounded ${!hasCookies || cookieLoading
+          disabled={!hasCookies || cookieLoading || !csrfToken}
+          className={`px-4 py-2 text-white rounded ${!hasCookies || cookieLoading || !csrfToken
             ? 'bg-gray-400 cursor-not-allowed'
             : 'bg-blue-500 hover:bg-blue-600'
             }`}
@@ -95,10 +100,13 @@ export default function Home() {
         </button>
       </form>
 
-      <CookieUpload />
+      <CookieUpload
+        csrfToken={csrfToken}
+        onStatusChange={handleCookieStatusChange}
+      />
 
       {message && (
-        <p className={`mt-4 ${message.includes('error') ? 'text-red-600' : 'text-green-600'
+        <p className={`mt-4 ${message.includes('error') || message.includes('Failed') ? 'text-red-600' : 'text-green-600'
           }`}>
           {message}
         </p>

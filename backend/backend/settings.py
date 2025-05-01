@@ -143,29 +143,31 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Allow requests from the front end
+    "http://localhost:3000",  # Local development frontend
+    "http://127.0.0.1:3000",  # Local development frontend
     "https://spotdl-web.vercel.app",  # Production frontend
 ]
 
 # Optionally, allow credentials (cookies, authorization headers, etc.)
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",  # Local development frontend
-    "https://spotdl-web.vercel.app",  # Production frontend
-]
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
-CSRF_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_NAME = "csrftoken"
+
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript to access the cookie
-CSRF_COOKIE_NAME = "csrftoken"
+CSRF_COOKIE_SAMESITE = "None"  # allow cross-site POST if you need it
+SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_HTTPONLY = True  # lock it down from JS
 
 if DEBUG:
     CSRF_COOKIE_SECURE = False
     SESSION_COOKIE_SECURE = False
-    CSRF_USE_SESSIONS = False  # Store CSRF token in cookie instead of session
+    CSRF_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_HTTPONLY = False  # so JS can read document.cookie
+
 
 COOKIE_FILE = os.getenv("COOKIE_FILE", os.path.join(BASE_DIR, "cookies.txt"))
 
