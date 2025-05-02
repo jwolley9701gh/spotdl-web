@@ -7,6 +7,7 @@ asgiref==3.8.1
 async-timeout==5.0.1
 attrs==25.3.0
 beautifulsoup4==4.13.3
+Brotli==1.1.0
 certifi==2025.1.31
 channels==4.2.2
 channels_redis==4.2.1
@@ -47,6 +48,7 @@ postgrest==1.0.1
 propcache==0.3.1
 psycopg==3.2.7
 psycopg-binary==3.2.7
+pycryptodomex==3.22.0
 pydantic==2.10.6
 pydantic_core==2.27.2
 Pygments==2.19.1
@@ -87,5 +89,5 @@ websockets==14.2
 whitenoise==6.9.0
 wrapt==1.17.2
 yarl==1.20.0
-yt-dlp==2025.2.19
+yt-dlp==2025.4.30
 ytmusicapi==1.10.1
