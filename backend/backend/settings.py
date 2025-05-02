@@ -203,6 +203,10 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 if not os.path.exists(MEDIA_ROOT):
     os.makedirs(MEDIA_ROOT)
 
+# check if the directory is accessible
+if not os.access(MEDIA_ROOT, os.W_OK):
+    raise PermissionError(f"Cannot write to MEDIA_ROOT: {MEDIA_ROOT}")
+
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
