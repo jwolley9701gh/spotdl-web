@@ -1,0 +1,20 @@
+# Dockerfile
+
+# 1) Start from a slim Python base
+FROM python:3.11-slim
+
+# 2) Install ffmpeg (and clean up apt cache)
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+# 3) Install Python deps
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 4) Copy the rest of your code
+COPY . .
+
+# 5) Run your ASGI server (the $PORT var is supplied by Render)
+CMD ["gunicorn", "backend.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:$PORT"]
