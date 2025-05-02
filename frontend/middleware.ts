@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// 1) Protect everything under "/" (all pages, but skip _next and static assets)
+export const config = {
+    matcher: ["/:path*"],
+};
+
 export function middleware(req: NextRequest) {
-    const auth = req.headers.get("authorization") || "";
-    // “Basic base64(user:pass)”
+    const auth = req.headers.get("authorization") ?? "";
     if (auth.startsWith("Basic ")) {
-        const [user, pass] = Buffer.from(auth.split(" ")[1], "base64")
+        // Edge runtime supports Buffer.from, not atob()
+        const [user, pass] = Buffer
+            .from(auth.split(" ")[1], "base64")
             .toString()
             .split(":");
         if (

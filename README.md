@@ -16,6 +16,7 @@ npm run dev
 
 ## Security
 - [ ] Input checking
+- [ ] Encrypt client-side
 
 ## Functionality
 - [ ] Support for downloading albums
