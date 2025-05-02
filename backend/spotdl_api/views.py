@@ -204,6 +204,7 @@ class DownloadSongAPIView(APIView):
                 tmp.flush()
                 tmp.close()
                 cookie_path = tmp.name
+                logger.info("Downloaded temp cookie file to %s", cookie_path)
 
                 # b) New event loop for this thread
                 loop = asyncio.new_event_loop()
@@ -220,7 +221,7 @@ class DownloadSongAPIView(APIView):
                     "output": os.path.join(
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
                     ),
-                    "yt_dlp_args": "--no-quiet --verbose",
+                    "yt_dlp_args": f"--no-quiet --verbose --cookies {cookie_path}",
                 }
 
                 spotdl = Spotdl(
