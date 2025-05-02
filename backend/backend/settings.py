@@ -55,8 +55,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "spotdl_api.middleware.BasicAuthMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "spotdl_api.middleware.BasicAuthMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
