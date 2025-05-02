@@ -252,5 +252,15 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": True,
         },
+        "spotdl": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "yt_dlp": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
     },
 }

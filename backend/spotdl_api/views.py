@@ -33,7 +33,8 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from .models import DownloadTask
 
 logger = logging.getLogger("spotdl_api")
-
+logging.getLogger("spotdl").setLevel(logging.DEBUG)
+logging.getLogger("yt_dlp").setLevel(logging.DEBUG)
 
 # ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -192,7 +193,7 @@ class DownloadSongAPIView(APIView):
         def download_job():
             cookie_path = None
             loop = None
-            spotdl_thread = None
+            spotdl = None
             try:
                 # a) Download cookie into temp file
                 supa = get_supabase_client()
@@ -223,7 +224,7 @@ class DownloadSongAPIView(APIView):
                     "yt_dlp_args": "--no-quiet --verbose",
                 }
 
-                spotdl_thread = Spotdl(
+                spotdl = Spotdl(
                     client_id=settings.SPOTIFY_CLIENT_ID,
                     client_secret=settings.SPOTIFY_CLIENT_SECRET,
                     loop=loop,
@@ -241,7 +242,7 @@ class DownloadSongAPIView(APIView):
                         group, {"type": "progress_update", "data": data}
                     )
 
-                spotdl_thread.downloader.progress_handler = ProgressHandler(
+                spotdl.downloader.progress_handler = ProgressHandler(
                     simple_tui=True, update_callback=ws_callback
                 )
 
@@ -261,7 +262,7 @@ class DownloadSongAPIView(APIView):
                     raise ValueError(f"Unsupported URL type: {url}")
 
                 # f) Perform the download (blocking)
-                spotdl_thread.download_songs(song_list)
+                spotdl.download_songs(song_list)
 
                 loop.stop()
 
@@ -311,7 +312,7 @@ class DownloadSongAPIView(APIView):
                 )
             finally:
                 logger.info("Running cleanup for task %s", task_id)
-                cleanup_spotdl_thread(spotdl_thread)
+                cleanup_spotdl_thread(spotdl)
                 clear_media_directory()
                 cleanup_local_cookie(cookie_path)
                 cleanup_remote_cookie()
