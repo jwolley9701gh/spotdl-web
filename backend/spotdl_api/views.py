@@ -20,7 +20,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 from supabase import create_client
-from spotdl import Spotdl
+from spotdl import SpotifyClient, Downloader
 from spotdl.types.options import DownloaderOptions
 from spotdl.types.song import Song
 from spotdl.types.playlist import Playlist
@@ -58,16 +58,15 @@ def clear_media_directory():
                 logger.warning("Failed to delete %s: %s", path, e)
 
 
-def cleanup_spotdl_thread(spotdl_thread: Spotdl):
+def cleanup_spotdl_thread(downloader: Downloader):
     """Close SpotDL's progress handler if present."""
-    if not spotdl_thread:
+    if not downloader:
         return
-    handler = getattr(spotdl_thread.downloader, "progress_handler", None)
-    if handler:
-        try:
-            handler.close()
-        except Exception as e:
-            logger.warning("Error closing progress handler: %s", e)
+    handler = downloader.progress_handler
+    try:
+        handler.close()
+    except Exception as e:
+        logger.warning("Error closing progress handler: %s", e)
 
 
 def cleanup_local_cookie(cookie_path: str):
@@ -225,14 +224,18 @@ class DownloadSongAPIView(APIView):
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
                     ),
                     "yt_dlp_args": f"--no-quiet --verbose",
+                    "simple_tui": True,
                 }
 
-                spotdl = Spotdl(
-                    client_id=settings.SPOTIFY_CLIENT_ID,
-                    client_secret=settings.SPOTIFY_CLIENT_SECRET,
-                    loop=loop,
-                    downloader_settings=DownloaderOptions(**opts),
-                )
+                try:
+                    # Initialize spotify client
+                    SpotifyClient.init(
+                        client_id=settings.SPOTIFY_CLIENT_ID,
+                        client_secret=settings.SPOTIFY_CLIENT_SECRET,
+                    )
+
+                except Exception as e:
+                    logger.warning("SpotifyClient not re-initialised: %s", e)
 
                 # d) Attach progress handler
                 def ws_callback(handler, message=""):
@@ -245,7 +248,13 @@ class DownloadSongAPIView(APIView):
                         group, {"type": "progress_update", "data": data}
                     )
 
-                spotdl.downloader.progress_handler = ProgressHandler(
+                # Initialize downloader
+                downloader = Downloader(
+                    settings=DownloaderOptions(**opts),
+                    loop=loop,
+                )
+
+                downloader.progress_handler = ProgressHandler(
                     simple_tui=True, update_callback=ws_callback
                 )
 
@@ -265,7 +274,7 @@ class DownloadSongAPIView(APIView):
                     raise ValueError(f"Unsupported URL type: {url}")
 
                 # f) Perform the download (blocking)
-                spotdl.download_songs(song_list)
+                downloader.download_multiple_songs(song_list)
 
                 loop.stop()
 
