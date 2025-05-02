@@ -36,8 +36,6 @@ DEBUG = os.getenv("DEBUG", "True").lower() in ("1", "true", "yes")
 # ALLOWED_HOSTS = ["localhost", "https://spotdl-web.onrender.com"]
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
 
-BASIC_AUTH_USER = os.getenv("BASIC_AUTH_USER")
-BASIC_AUTH_PASS = os.getenv("BASIC_AUTH_PASS")
 
 # Application definition
 
@@ -55,7 +53,6 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "spotdl_api.middleware.BasicAuthMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
