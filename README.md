@@ -1,3 +1,17 @@
+# Run
+
+## Backend
+```
+cd backend
+uvicorn backend.asgi:application
+```
+
+## Frontend
+```
+cd frontend
+npm run dev
+```
+
 # Roadmap
 
 ## Security

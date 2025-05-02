@@ -210,14 +210,17 @@ class DownloadSongAPIView(APIView):
                 asyncio.set_event_loop(loop)
 
                 # c) Initialize Spotdl in this thread
+                ffmpeg_path = settings.FFMPEG_PATH if settings.FFMPEG_PATH else "ffmpeg"
                 opts = {
                     "log_level": "DEBUG",
                     "cookie_file": cookie_path,
                     "bitrate": "132k",
                     "generate_lrc": True,
+                    "ffmpeg": ffmpeg_path,
                     "output": os.path.join(
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
                     ),
+                    "yt_dlp_args": "--no-quiet --verbose",
                 }
 
                 spotdl_thread = Spotdl(

@@ -207,6 +207,10 @@ if not os.path.exists(MEDIA_ROOT):
 if not os.access(MEDIA_ROOT, os.W_OK):
     raise PermissionError(f"Cannot write to MEDIA_ROOT: {MEDIA_ROOT}")
 
+FFMPEG_PATH = None
+if not DEBUG:
+    FFMPEG_PATH = "/usr/bin/ffmpeg"
+
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
