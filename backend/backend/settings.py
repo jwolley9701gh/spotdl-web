@@ -31,8 +31,8 @@ SECRET_KEY = os.getenv(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = True
-DEBUG = os.getenv("DEBUG", "True")
-print(f"DEBUG: {DEBUG}")
+DEBUG = os.getenv("DEBUG", "True").lower() in ("1", "true", "yes")
+print(f"DEBUG: {DEBUG}, type: {type(DEBUG)}")
 
 # ALLOWED_HOSTS = ["localhost", "https://spotdl-web.onrender.com"]
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
