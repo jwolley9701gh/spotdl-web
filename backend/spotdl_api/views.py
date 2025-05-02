@@ -31,6 +31,7 @@ from spotdl.download.progress_handler import ProgressHandler
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from .models import DownloadTask
+from .crypto import decrypt_bytes, encrypt_bytes
 
 logger = logging.getLogger("spotdl_api")
 logging.getLogger("spotdl").setLevel(logging.DEBUG)
@@ -119,20 +120,21 @@ def upload_cookies(request: HttpRequest):
     if not file_obj:
         return JsonResponse({"error": "No cookie file provided"}, status=400)
 
-    # write to temp file
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
-    try:
-        for chunk in file_obj.chunks():
-            tmp.write(chunk)
-        tmp.flush()
-        tmp_path = tmp.name
-    finally:
-        tmp.close()
+    # encrypt and write to temp file
+    data = b"".join(chunk for chunk in file_obj.chunks())
+    ciphertext = encrypt_bytes(data)
 
+    enc_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".enc")
+    try:
+        enc_tmp.write(ciphertext)
+        enc_tmp.flush()
+        enc_path = enc_tmp.name
+    finally:
+        enc_tmp.close()
     try:
         supa = get_supabase_client()
         supa.storage.from_(settings.SUPABASE_COOKIE_BUCKET).upload(
-            "cookie.txt", tmp_path, {"upsert": "true"}
+            "cookie.txt", enc_path, {"upsert": "true"}
         )
         return JsonResponse({"message": "Cookie file uploaded successfully"})
     except Exception as e:
@@ -140,7 +142,7 @@ def upload_cookies(request: HttpRequest):
         return JsonResponse({"error": str(e)}, status=500)
     finally:
         # always clean up the temp file
-        cleanup_local_cookie(tmp_path)
+        cleanup_local_cookie(enc_path)
 
 
 # TODO: client & server size checking of url & cookie file
@@ -196,9 +198,10 @@ class DownloadSongAPIView(APIView):
             try:
                 # a) Download cookie into temp file
                 supa = get_supabase_client()
-                data = supa.storage.from_(settings.SUPABASE_COOKIE_BUCKET).download(
+                enc_data = supa.storage.from_(settings.SUPABASE_COOKIE_BUCKET).download(
                     "cookie.txt"
                 )
+                data = decrypt_bytes(enc_data)
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
                 tmp.write(data)
                 tmp.flush()
