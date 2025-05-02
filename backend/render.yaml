@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: spotdl-backend
+    env: python
+    plan: free
+    # adjust the repo & branch
+    repo: https://github.com/jwolley9701gh/spotdl-web
+    branch: main
+    buildCommand: pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput
+    startCommand: uvicorn backend.asgi:application --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+      - key: DEBUG           # set to "False" in prod
+      - key: SPOTIFY_CLIENT_ID
+      - key: SPOTIFY_CLIENT_SECRET
+      - key: SUPABASE_URL
+      - key: SUPABASE_KEY
+      - key: SUPABASE_COOKIE_BUCKET
+      - key: SUPABASE_DB_URL
+      - key: CORS_ALLOWED_ORIGINS      # e.g. https://spotdl-frontend.vercel.app
+      - key: CSRF_TRUSTED_ORIGINS      # same as above
