@@ -6,7 +6,7 @@ services:
     # adjust the repo & branch
     repo: https://github.com/jwolley9701gh/spotdl-web
     branch: main
-    buildCommand: pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput
+    buildCommand: pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput
     startCommand: uvicorn backend.asgi:application --host 0.0.0.0 --port $PORT
     envVars:
       - key: SECRET_KEY
