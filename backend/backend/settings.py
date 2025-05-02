@@ -250,7 +250,7 @@ LOGGING = {
         "spotdl_api": {  # Logger for your app
             "handlers": ["console", "file"],
             "level": "DEBUG",
-            "propagate": True,
+            "propagate": False,
         },
         "spotdl": {
             "handlers": ["console"],

@@ -221,7 +221,7 @@ class DownloadSongAPIView(APIView):
                     "output": os.path.join(
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
                     ),
-                    "yt_dlp_args": f"--no-quiet --verbose --cookies {cookie_path}",
+                    "yt_dlp_args": f"--no-quiet --verbose",
                 }
 
                 spotdl = Spotdl(
