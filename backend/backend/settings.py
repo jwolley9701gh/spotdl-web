@@ -163,11 +163,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Local development frontend
-    "http://127.0.0.1:3000",  # Local development frontend
-    "https://spotdl-web.vercel.app",  # Production frontend
-]
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(
+    ","
+)  # Production: frontend URL
 
 # Optionally, allow credentials (cookies, authorization headers, etc.)
 CORS_ALLOW_CREDENTIALS = True
