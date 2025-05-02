@@ -34,7 +34,6 @@ from .models import DownloadTask
 
 logger = logging.getLogger("spotdl_api")
 logging.getLogger("spotdl").setLevel(logging.DEBUG)
-logging.getLogger("yt_dlp").setLevel(logging.DEBUG)
 
 # ─── Helpers ────────────────────────────────────────────────────────────────────
 

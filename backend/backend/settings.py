@@ -257,10 +257,9 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": False,
         },
-        "yt_dlp": {
+        "": {
             "handlers": ["console"],
-            "level": "DEBUG",
-            "propagate": False,
+            "level": "WARNING",
         },
     },
 }
