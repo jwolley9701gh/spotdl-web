@@ -1,36 +1,39 @@
-import logging
-import json
-import shutil
-from django.http import JsonResponse
-from spotdl import Spotdl
-from django.conf import settings
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.middleware.csrf import get_token
-import asyncio
-from spotdl.types.song import Song  # Import the Song class
-import nest_asyncio  # Import nest_asyncio
 import os
-from spotdl.types.options import DownloaderOptions
+import uuid
+import threading
+import asyncio
+import importlib
+import logging
+import shutil
+
+from django.http import JsonResponse
+from django.conf import settings
+from django.core.cache import cache
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
+from django.middleware.csrf import get_token
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+from spotdl import Spotdl
+from spotdl.types.options import DownloaderOptions
+from spotdl.types.song import Song
+from spotdl.types.playlist import Playlist
+from spotdl.types.album import Album
+from spotdl.types.artist import Artist
+
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+
+from supabase import create_client
+
+from .models import DownloadTask
 
 # Get a logger instance
 logger = logging.getLogger("spotdl_api")
-
-nest_asyncio.apply()
-
-downloader_settings = {
-    "log_level": "DEBUG",
-    "cookie_file": settings.COOKIE_FILE,  # Add the cookie file path
-    "bitrate": "auto",
-}
-
-# Initialize SpotDL
-spotdl = Spotdl(
-    client_id=settings.SPOTIFY_CLIENT_ID,
-    client_secret=settings.SPOTIFY_CLIENT_SECRET,
-    loop=asyncio.get_event_loop(),
-    downloader_settings=DownloaderOptions(**downloader_settings),
-)
 
 
 @ensure_csrf_cookie
@@ -85,63 +88,156 @@ def clear_media_directory():
             try:
                 if os.path.isfile(file_path) or os.path.islink(file_path):
                     os.unlink(file_path)
-                elif os.path.isdir(file_path):
+                else:
                     shutil.rmtree(file_path)
             except Exception as e:
                 logger.error(f"Failed to delete {file_path}. Reason: {e}")
 
 
-async def download_song(request):
-    try:
-        # Parse JSON data from the request body
-        data = json.loads(request.body)
-        url = data.get("url")  # Extract the URL from the JSON data
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON data in request")
-        return JsonResponse({"error": "Invalid JSON data"}, status=400)
-
-    logger.debug(f"Received request to download song with URL: {url}")
-
-    if not url:
-        logger.error("No URL provided in the request")
-        return JsonResponse({"error": "URL is required"}, status=400)
-
-    try:
-        logger.info(f"Attempting to download song from URL: {url}")
-
-        # Create a Song object from the URL
-        song = Song.from_url(url)
-
-        # Call the asynchronous download_song method directly
-        downloader = spotdl.downloader
-        result = downloader.download_song(song)
-        logger.info(f"Song downloaded successfully: {result}")
-
-        # Convert the Song object to a dictionary using the `json` property
-        song_dict = result[0].json if result[0] else None
-        file_path = str(result[1]) if result[1] else None
-
-        # Clear the media directory before moving the new file
-        clear_media_directory()
-
-        # Move the file to the media directory
-        if file_path:
-            file_name = os.path.basename(file_path)
-            media_file_path = os.path.join(settings.MEDIA_ROOT, file_name)
-            os.rename(file_path, media_file_path)
-
-            # Generate the download URL
-            download_url = f"{settings.MEDIA_URL}{file_name}"
-        else:
-            download_url = None
-
-        return JsonResponse(
-            {
-                "message": "Song downloaded successfully",
-                "song": song_dict,
-                "download_url": download_url,
+def get_song_list(url):
+    auth_manager = SpotifyClientCredentials(
+        client_id=settings.SPOTIFY_CLIENT_ID,
+        client_secret=settings.SPOTIFY_CLIENT_SECRET,
+    )
+    sp = spotipy.Spotify(auth_manager=auth_manager)
+    if "track" in url:
+        track = sp.track(url)
+        meta = {
+            "song_id": track["id"],
+            "name": track["name"],
+        }
+        return [meta]
+    elif "playlist" in url:
+        tracks = sp.playlist_tracks(url)
+        all_meta = []
+        for item in tracks["items"]:
+            track = item["track"]
+            meta = {
+                "song_id": track["id"],
+                "name": track["name"],
             }
-        )
-    except Exception as e:
-        logger.error(f"Error downloading song: {str(e)}", exc_info=True)
-        return JsonResponse({"error": str(e)}, status=500)
+            all_meta.append(meta)
+        return all_meta
+    # TODO: Add support for album and artist URLs
+
+
+class DownloadSongAPIView(APIView):
+    def post(self, request):
+        url = request.data.get("url")
+        if not url:
+            return Response({"error": "URL is required"}, status=400)
+
+        # 1) Create the DB record (only id & url)
+        task_id = str(uuid.uuid4())
+        DownloadTask.objects.create(id=task_id, url=url)
+
+        channel_layer = get_channel_layer()
+        group = f"download_{task_id}"
+
+        group_songs = get_song_list(url)
+
+        # 3) Background download job
+        def download_job():
+            try:
+                # b) Create a fresh event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # c) Initialize SpotifyClient & Spotdl in this thread
+                from spotdl import Spotdl
+                from spotdl.types.options import DownloaderOptions
+
+                opts = {
+                    "log_level": "DEBUG",
+                    "cookie_file": settings.COOKIE_FILE,  # Add the cookie file path
+                    "bitrate": "132k",
+                    "output": os.path.join(
+                        settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
+                    ),
+                }
+
+                spotdl_thread = Spotdl(
+                    client_id=settings.SPOTIFY_CLIENT_ID,
+                    client_secret=settings.SPOTIFY_CLIENT_SECRET,
+                    loop=loop,
+                    downloader_settings=DownloaderOptions(**opts),
+                )
+
+                # e) Attach ProgressHandler → WebSocket callback
+                from spotdl.download.progress_handler import ProgressHandler
+
+                def ws_callback(handler, message=""):
+                    song_json = handler.song.json
+                    p = int(handler.progress)
+                    data = {
+                        "progress": p,
+                        "message": message,
+                        "song": song_json,  # tag this update with the song info
+                    }
+                    async_to_sync(channel_layer.group_send)(
+                        group,
+                        {"type": "progress_update", "data": data},
+                    )
+
+                spotdl_thread.downloader.progress_handler = ProgressHandler(
+                    simple_tui=True,
+                    update_callback=ws_callback,
+                )
+
+                if "track" in url:
+                    song = Song.from_url(url)
+                    song_list = [song]
+                elif "playlist" in url:
+                    playlist = Playlist.from_url(url)
+                    song_list = list(map(Song.from_url, playlist.urls))
+                elif "album" in url:
+                    album = Album.from_url(url)
+                    song_list = list(map(Song.from_url, album.urls))
+                elif "artist" in url:
+                    artist = Artist.from_url(url)
+                    song_list = list(map(Song.from_url, artist.urls))
+
+                results = spotdl_thread.download_songs(song_list)
+                file_paths = [path for (_, path) in results]
+
+                zip_base = os.path.join(settings.MEDIA_ROOT, task_id)
+                zip_path = shutil.make_archive(
+                    task_id, "zip", root_dir=settings.MEDIA_ROOT
+                )
+                final_path = zip_path
+
+                # g) Upload the resulting file to Supabase Storage
+                supa = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+                with open(final_path, "rb") as f:
+                    key = f"{task_id}/{os.path.basename(final_path)}"
+                    supa.storage.from_("downloads").upload(key, f)
+                    public_url = supa.storage.from_("downloads").get_public_url(key)
+
+                # h) Persist the final download_url in your DB
+                task = DownloadTask.objects.get(id=task_id)
+                task.download_url = public_url
+                task.save()
+
+                spotdl_thread.downloader.progress_handler.close()
+                # Clean up the local file
+                if os.path.exists(final_path):
+                    os.remove(final_path)
+                # Clear the media directory
+                clear_media_directory()
+                # Send a final message to the group
+                async_to_sync(channel_layer.group_send)(
+                    group,
+                    {"type": "download_complete", "data": {"download_url": public_url}},
+                )
+
+            except Exception:
+                logger.exception("Download failed")
+                err = {"status": "error", "progress": 0}
+                async_to_sync(channel_layer.group_send)(
+                    group, {"type": "progress_update", "data": err}
+                )
+
+        # 4) Launch the job in its own thread
+        threading.Thread(target=download_job, daemon=True).start()
+
+        return Response({"task_id": task_id, "songs": group_songs}, status=202)

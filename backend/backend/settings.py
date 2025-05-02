@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "spotdl_api",
     "corsheaders",
+    "channels",
 ]
 
 MIDDLEWARE = [
@@ -87,10 +88,29 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
+
+DB_USER = os.getenv("SUPABASE_USER")
+DB_PASSWORD = os.getenv("SUPABASE_PASSWORD")
+DB_HOST = os.getenv("SUPABASE_HOST")
+DB_PORT = os.getenv("SUPABASE_PORT")
+DB_NAME = os.getenv("SUPABASE_DBNAME")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "HOST": DB_HOST,
+        "NAME": DB_NAME,
+        "USER": DB_USER,
+        "PORT": DB_PORT,
+        "PASSWORD": DB_PASSWORD,
     }
 }
 
@@ -170,6 +190,17 @@ if DEBUG:
 
 
 COOKIE_FILE = os.getenv("COOKIE_FILE", os.path.join(BASE_DIR, "cookies.txt"))
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "spotdl-progress",
+    }
+}
+
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+ASGI_APPLICATION = "backend.asgi.application"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
