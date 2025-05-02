@@ -3,19 +3,95 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --spotify-green: #1db954;
+  --spotify-light: #1ed760;
+  --spotify-dark: #15883e;
+  --spotify-accent: #b3f664;
+  --foreground: #ffffff;
+  --background: #a5a4ff;
+  --card-yellow: #ffc547;
+  --card-purple: #7b5cff;
+  --card-red: #ff6b6b;
+  --card-blue: #a4e0ff;
+  --card-green: #c8ff9c;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Add Spotify colors to Tailwind */
+@layer utilities {
+  .bg-spotify-green {
+    background-color: var(--spotify-green);
+  }
+
+  .bg-spotify-light {
+    background-color: var(--spotify-light);
+  }
+
+  .bg-spotify-dark {
+    background-color: var(--spotify-dark);
+  }
+
+  .bg-spotify-accent {
+    background-color: var(--spotify-accent);
+  }
+
+  .text-spotify-green {
+    color: var(--spotify-green);
+  }
+
+  .text-spotify-light {
+    color: var(--spotify-light);
+  }
+
+  .text-spotify-dark {
+    color: var(--spotify-dark);
+  }
+
+  .text-spotify-accent {
+    color: var(--spotify-accent);
   }
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-weight: 500;
+}
+
+/* Custom progress bar styling */
+progress {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+progress::-webkit-progress-bar {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 9999px;
+}
+
+progress::-webkit-progress-value {
+  background-color: #000;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+progress::-moz-progress-bar {
+  background-color: #000;
+  border-radius: 9999px;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #181818;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
 }
