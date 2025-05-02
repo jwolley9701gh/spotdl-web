@@ -4,3 +4,5 @@ __pycache__
 *.log
 *.mp3
 cookies.txt
+.cache
+.env.prod
