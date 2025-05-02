@@ -20,5 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4) Copy the rest of your code
 COPY . .
 
+RUN chmod +x render_start.sh
+
 # 5) Run your ASGI server (the $PORT var is supplied by Render)
 CMD ["gunicorn", "backend.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:$PORT"]
