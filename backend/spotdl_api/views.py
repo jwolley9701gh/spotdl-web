@@ -112,6 +112,7 @@ def csrf(request):
     return JsonResponse({"csrfToken": token})
 
 
+@ensure_csrf_cookie
 @require_http_methods(["POST"])
 def upload_cookies(request: HttpRequest):
     file_obj = request.FILES.get("cookie_file")
