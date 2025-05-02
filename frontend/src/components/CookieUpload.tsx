@@ -1,99 +1,82 @@
-import React, { useState, ChangeEvent } from 'react';
-import axios from 'axios';
-import { useCookieStatus } from '@/hooks/useCookieStatus';
+// CookieUpload.tsx
+import React, { useState, ChangeEvent } from "react";
+import axios from "axios";
 
 interface CookieUploadProps {
-    onStatusChange?: (hasCookies: boolean) => void;
     csrfToken: string | null;
+    onStatusChange?: () => void;
 }
 
-const CookieUpload = ({ onStatusChange, csrfToken }: CookieUploadProps) => {
+const CookieUpload = ({ csrfToken, onStatusChange }: CookieUploadProps) => {
     const [file, setFile] = useState<File | null>(null);
-    const [message, setMessage] = useState<string>('');
-    const { hasCookies, loading, refreshStatus } = useCookieStatus();
+    const [message, setMessage] = useState<string>("");
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
+        if (e.target.files?.[0]) {
             setFile(e.target.files[0]);
+            setMessage("");
         }
     };
 
     const handleUpload = async () => {
         if (!file) {
-            setMessage('Please select a file first');
+            setMessage("Please select a file first");
             return;
         }
-
         if (!csrfToken) {
-            setMessage('CSRF token not available. Please try again.');
+            setMessage("CSRF token not available. Please refresh and try again.");
             return;
         }
 
         const formData = new FormData();
-        formData.append('cookie_file', file);
+        formData.append("cookie_file", file);
 
         try {
             await axios.post(
                 `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/upload-cookies/`,
                 formData,
                 {
-                    headers: {
-                        'X-CSRFToken': csrfToken,
-                        // 'Content-Type': 'multipart/form-data',
-                    },
+                    headers: { "X-CSRFToken": csrfToken },
                     withCredentials: true,
                 }
             );
-
-            setMessage('Cookie file uploaded successfully');
+            setMessage("Cookie file uploaded successfully");
             setFile(null);
-
-            // Refresh cookie status and notify parent
-            await refreshStatus();
-            onStatusChange?.(true);
-        } catch (error) {
-            if (axios.isAxiosError(error)) {
-                console.error('Upload error details:', error.response?.data);
-                setMessage(error.response?.data?.error || 'Error uploading cookie file');
-            } else {
-                setMessage('Error uploading cookie file');
-            }
-            console.error('Upload error:', error);
-            onStatusChange?.(false);
+            onStatusChange?.();
+        } catch (err) {
+            console.error("Cookie upload error:", err);
+            setMessage(
+                axios.isAxiosError(err)
+                    ? err.response?.data?.error || "Error uploading cookie file"
+                    : "Unexpected error uploading cookie file"
+            );
         }
     };
 
     return (
         <div className="mt-4 p-4 border rounded">
             <h2 className="text-lg font-semibold mb-2">Upload Cookies</h2>
-            {loading ? (
-                <p className="text-sm text-gray-600">Checking cookie status...</p>
-            ) : (
-                <>
-                    {hasCookies ? (
-                        <p className="text-sm text-green-600 mb-2">Cookie file is present</p>
-                    ) : (
-                        <p className="text-sm text-yellow-600 mb-2">Please upload a cookie file to enable downloads</p>
-                    )}
-                    <input
-                        type="file"
-                        onChange={handleFileChange}
-                        className="mb-2 block"
-                        accept=".txt"
-                    />
-                    <button
-                        onClick={handleUpload}
-                        disabled={!csrfToken}
-                        className={`px-4 py-2 text-white rounded ${!csrfToken ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-                            }`}
-                    >
-                        Upload
-                    </button>
-                    {message && (
-                        <p className={`mt-2 text-sm ${message.includes('success') ? 'text-green-600' : 'text-red-600'
-                            }`}>{message}</p>
-                    )}
-                </>
+            <input
+                type="file"
+                onChange={handleFileChange}
+                accept=".txt"
+                className="mb-2 block"
+            />
+            <button
+                onClick={handleUpload}
+                disabled={!csrfToken}
+                className={`px-4 py-2 rounded text-white ${!csrfToken ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"
+                    }`}
+            >
+                Upload
+            </button>
+            {message && (
+                <p
+                    className={`mt-2 text-sm ${message.toLowerCase().includes("success") ? "text-green-600" : "text-red-600"
+                        }`}
+                >
+                    {message}
+                </p>
             )}
         </div>
     );

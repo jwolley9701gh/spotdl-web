@@ -19,3 +19,4 @@ class ProgressConsumer(AsyncJsonWebsocketConsumer):
     # Handler for messages sent with type="download_complete"
     async def download_complete(self, event):
         await self.send_json(event["data"])
+        await self.close()

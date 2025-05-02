@@ -5,8 +5,10 @@ import asyncio
 import importlib
 import logging
 import shutil
+import tempfile
+import zipfile
 
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.conf import settings
 from django.core.cache import cache
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -24,6 +26,7 @@ from spotdl.types.song import Song
 from spotdl.types.playlist import Playlist
 from spotdl.types.album import Album
 from spotdl.types.artist import Artist
+from spotdl.download.progress_handler import ProgressHandler
 
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -36,45 +39,50 @@ from .models import DownloadTask
 logger = logging.getLogger("spotdl_api")
 
 
+def get_supabase_client():
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+
+
 @ensure_csrf_cookie
 def csrf(request):
     csrf_token = get_token(request)
     return JsonResponse({"csrfToken": csrf_token})
 
 
-@require_http_methods(["GET"])
-def check_cookie_status(request):
-    """Check if cookie file exists and is valid"""
-    try:
-        cookie_exists = os.path.exists(settings.COOKIE_FILE)
-        return JsonResponse({"has_cookies": cookie_exists})
-    except Exception as e:
-        logger.error(f"Error checking cookie status: {str(e)}", exc_info=True)
-        return JsonResponse({"error": str(e)}, status=500)
-
-
 @require_http_methods(["POST"])
-def upload_cookies(request):
+def upload_cookies(request: HttpRequest):
     """
-    Upload cookies for the downloader
+    Upload the user's cookie file into Supabase Storage under `cookies/cookie.txt`.
     """
+    cookie_file = request.FILES.get("cookie_file")
+    if not cookie_file:
+        return JsonResponse({"error": "No cookie file provided"}, status=400)
+
+    supa = get_supabase_client()
     try:
-        # Get the cookie data from request
-        cookie_data = request.FILES.get("cookie_file")
-
-        if not cookie_data:
-            return JsonResponse({"error": "No cookie file provided"}, status=400)
-
-        # Write the cookie file
-        with open(settings.COOKIE_FILE, "wb+") as cookie_file:
-            for chunk in cookie_data.chunks():
-                cookie_file.write(chunk)
-
+        # convert the file to bytes
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        try:
+            for chunk in cookie_file.chunks():
+                tmp.write(chunk)
+            tmp.flush()
+            tmp_path = tmp.name
+        finally:
+            tmp.close()
+        # overwrite any existing cookie.txt
+        supa.storage.from_(settings.SUPABASE_COOKIE_BUCKET).upload(
+            "cookie.txt", tmp_path, {"upsert": "true"}
+        )
         return JsonResponse({"message": "Cookie file uploaded successfully"})
-
     except Exception as e:
-        logger.error(f"Error uploading cookies: {str(e)}", exc_info=True)
+        logger.error("Error uploading cookie to Supabase: %s", e, exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        # Clean up the temp file
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            logger.error("Error deleting temp file: %s", tmp_path, exc_info=True)
 
 
 def clear_media_directory():
@@ -94,6 +102,7 @@ def clear_media_directory():
                 logger.error(f"Failed to delete {file_path}. Reason: {e}")
 
 
+# TODO: client & server size checking of url & cookie file
 def get_song_list(url):
     auth_manager = SpotifyClientCredentials(
         client_id=settings.SPOTIFY_CLIENT_ID,
@@ -139,6 +148,16 @@ class DownloadSongAPIView(APIView):
         # 3) Background download job
         def download_job():
             try:
+                supa = get_supabase_client()
+                data = supa.storage.from_(settings.SUPABASE_COOKIE_BUCKET).download(
+                    "cookie.txt"
+                )
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                tmp.write(data)  # data is raw bytes
+                tmp.flush()
+                tmp.close()
+                cookie_path = tmp.name
+
                 # b) Create a fresh event loop for this thread
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
@@ -149,7 +168,7 @@ class DownloadSongAPIView(APIView):
 
                 opts = {
                     "log_level": "DEBUG",
-                    "cookie_file": settings.COOKIE_FILE,  # Add the cookie file path
+                    "cookie_file": cookie_path,
                     "bitrate": "132k",
                     "output": os.path.join(
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
@@ -197,33 +216,40 @@ class DownloadSongAPIView(APIView):
                     artist = Artist.from_url(url)
                     song_list = list(map(Song.from_url, artist.urls))
 
-                results = spotdl_thread.download_songs(song_list)
-                file_paths = [path for (_, path) in results]
+                spotdl_thread.download_songs(song_list)
 
-                zip_base = os.path.join(settings.MEDIA_ROOT, task_id)
-                zip_path = shutil.make_archive(
-                    task_id, "zip", root_dir=settings.MEDIA_ROOT
-                )
-                final_path = zip_path
+                loop.stop()
+
+                # Use Python's zipfile module to only include .mp3 or .lrc files
+                zip_path = os.path.join(settings.MEDIA_ROOT, f"{task_id}.zip")
+                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                    for root, _, files in os.walk(settings.MEDIA_ROOT):
+                        for file in files:
+                            if file.endswith(".mp3") or file.endswith(".lrc"):
+                                file_path = os.path.join(root, file)
+                                arcname = os.path.relpath(
+                                    file_path, settings.MEDIA_ROOT
+                                )
+                                zipf.write(file_path, arcname)
+                logger.info("ZIP archive created successfully at %s", zip_path)
 
                 # g) Upload the resulting file to Supabase Storage
-                supa = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-                with open(final_path, "rb") as f:
-                    key = f"{task_id}/{os.path.basename(final_path)}"
+                supa = get_supabase_client()
+                with open(zip_path, "rb") as f:
+                    # check zip_path exists
+                    if not os.path.exists(zip_path):
+                        logger.error("Zip file does not exist: %s", zip_path)
+                        raise FileNotFoundError(f"Zip file does not exist: {zip_path}")
+                    key = f"{task_id}/{os.path.basename(zip_path)}"
                     supa.storage.from_("downloads").upload(key, f)
                     public_url = supa.storage.from_("downloads").get_public_url(key)
+                    logger.info("Public URL: %s", public_url)
 
                 # h) Persist the final download_url in your DB
                 task = DownloadTask.objects.get(id=task_id)
                 task.download_url = public_url
                 task.save()
 
-                spotdl_thread.downloader.progress_handler.close()
-                # Clean up the local file
-                if os.path.exists(final_path):
-                    os.remove(final_path)
-                # Clear the media directory
-                clear_media_directory()
                 # Send a final message to the group
                 async_to_sync(channel_layer.group_send)(
                     group,
@@ -236,6 +262,49 @@ class DownloadSongAPIView(APIView):
                 async_to_sync(channel_layer.group_send)(
                     group, {"type": "progress_update", "data": err}
                 )
+            finally:
+                logger.info("Cleaning up...")
+                # close the progress handler
+
+                if spotdl_thread is not None:
+                    logger.info("> Spotdl thread")
+                    # Ensure the progress handler is closed
+                    if hasattr(spotdl_thread.downloader, "progress_handler"):
+                        spotdl_thread.downloader.progress_handler.close()
+                    else:
+                        logger.warning("Progress handler not found in downloader")
+                    logger.info("DONE")
+
+                # cleanup local files
+                logger.info("> Media directory")
+                clear_media_directory()
+                logger.info("DONE")
+
+                # remove temp cookie file
+                logger.info("> Cookie file")
+                try:
+                    os.remove(cookie_path)
+                except OSError:
+                    logger.error("Error deleting temp cookie file: %s", cookie_path)
+
+                # remove stored cookie file from Supabase
+                try:
+                    supa = get_supabase_client()
+                    supa.storage.from_(settings.SUPABASE_COOKIE_BUCKET).remove(
+                        ["cookie.txt"]
+                    )
+                except Exception as e:
+                    logger.warning("Failed to delete cookie file from Supabase: %s", e)
+                logger.info("DONE")
+
+                logger.info("> Close Loop")
+                try:
+                    loop.close()
+                except Exception:
+                    logger.warning("Failed to close loop for task %s", task_id)
+                # Remove it from thread-local so no stray references
+                asyncio.set_event_loop(None)
+                logger.info("DONE")
 
         # 4) Launch the job in its own thread
         threading.Thread(target=download_job, daemon=True).start()

@@ -102,6 +102,7 @@ DB_PORT = os.getenv("SUPABASE_PORT")
 DB_NAME = os.getenv("SUPABASE_DBNAME")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_COOKIE_BUCKET = os.getenv("SUPABASE_COOKIE_BUCKET", "cookies")
 
 DATABASES = {
     "default": {
@@ -187,9 +188,6 @@ if DEBUG:
     CSRF_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_HTTPONLY = False  # so JS can read document.cookie
-
-
-COOKIE_FILE = os.getenv("COOKIE_FILE", os.path.join(BASE_DIR, "cookies.txt"))
 
 CACHES = {
     "default": {
