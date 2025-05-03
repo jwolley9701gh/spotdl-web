@@ -9,7 +9,7 @@ import tempfile
 import zipfile
 
 from django.conf import settings
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
@@ -170,6 +170,27 @@ def download_status(request, task_id):
     )
 
 
+# ─── Download ZIP Endpoint ──────────────────────────────────────────────────
+@require_http_methods(["GET"])
+def download_zip(request, zip_name):
+    # Construct the path to the zip file (ensure it exists in MEDIA_ROOT)
+    file_path = os.path.join(settings.MEDIA_ROOT, zip_name)
+
+    # Ensure the file exists
+    if not os.path.exists(file_path):
+        return HttpResponse(status=404)
+
+    # Open the zip file and send it in the response
+    response = HttpResponse(
+        open(file_path, "rb").read(),
+        content_type="application/zip",  # Set the correct MIME type
+    )
+
+    # Force download with the filename provided in the URL
+    response["Content-Disposition"] = f'attachment; filename="{zip_name}"'
+    return response
+
+
 # ─── Download Song Endpoint ──────────────────────────────────────────────────────
 
 
@@ -201,18 +222,45 @@ class DownloadSongAPIView(APIView):
             return all_meta
         # TODO: Add support for album and artist URLs
 
+    def create_zip_batches(self, files):
+        """Create zip batches for files, ensuring each batch is <= 50MB."""
+        MAX_SIZE = 50 * 1024 * 1024
+        batches = []
+        current, cursize = [], 0
+        for fpath in files:
+            fsz = os.path.getsize(fpath)
+            if fsz > MAX_SIZE:
+                if current:
+                    batches.append(current)
+                    current, cursize = [], 0
+                batches.append([fpath])
+                continue
+            if cursize + fsz > MAX_SIZE:
+                batches.append(current)
+                current, cursize = [fpath], fsz
+            else:
+                current.append(fpath)
+                cursize += fsz
+        if current:
+            batches.append(current)
+        return batches
+
     def post(self, request):
         url = request.data.get("url")
         if not url:
             return Response({"error": "URL is required"}, status=400)
 
+        # Clean up the media directory before starting a new download
+        clear_media_directory()
+
         # 1) Create DB record
         task_id = str(uuid.uuid4())
         DownloadTask.objects.create(id=task_id, url=url)
 
-        # get song metadata for frontend
+        # Get song metadata for frontend
         group_songs = self.get_song_list(url)
-        # create DownloadSong records
+
+        # Create DownloadSong records
         for song in group_songs:
             try:
                 DownloadSong.objects.create(
@@ -223,38 +271,30 @@ class DownloadSongAPIView(APIView):
                     message="",
                 )
             except IntegrityError:
-                # if the song already exists, just update the task_id and initialize progress
                 DownloadSong.objects.filter(sid=song["song_id"]).update(
                     task_id=task_id, progress=0, message=""
                 )
 
-        # 2) Background job
+        # 2) Start background job
         def download_job():
             cookie_path = None
             loop = None
             spotdl = None
             try:
-                # a) Download cookie into temp file
+                # a) Download cookie file into temp file
                 supa = get_supabase_client()
                 enc_data = supa.storage.from_(settings.SUPABASE_COOKIE_BUCKET).download(
                     "cookie.txt"
                 )
                 data = decrypt_bytes(enc_data)
 
-                plaintext = data.decode(errors="ignore")  # assume UTF-8
-                lines = plaintext.splitlines()
-                logger.debug(
-                    "Decrypted cookies.txt (first line):\n%s", "\n".join(lines[:1])
-                )
-
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
                 tmp.write(data)
                 tmp.flush()
                 tmp.close()
                 cookie_path = tmp.name
-                logger.info("Downloaded temp cookie file to %s", cookie_path)
 
-                # b) New event loop for this thread
+                # b) Create new event loop for this thread
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
@@ -272,7 +312,6 @@ class DownloadSongAPIView(APIView):
                     "yt_dlp_args": f"--no-quiet --verbose",
                     "simple_tui": True,
                 }
-
                 try:
                     # Initialize spotify client
                     SpotifyClient.init(
@@ -282,29 +321,18 @@ class DownloadSongAPIView(APIView):
 
                 except Exception as e:
                     logger.warning("SpotifyClient not re-initialised: %s", e)
-
-                # d) Attach progress handler
-                def on_progress(handler: SongTracker, message=""):
-                    if handler.song:
-                        song_id = handler.song.json["song_id"]
-                        # Update progress in DB
-                        try:
-                            DownloadSong.objects.filter(
-                                sid=song_id, task_id=task_id
-                            ).update(
-                                progress=handler.progress,
-                                message=message,
-                            )
-                        except Exception:
-                            logger.exception(
-                                "Failed to update progress for song %s", song_id
-                            )
-
-                # Initialize downloader
                 downloader = Downloader(
                     settings=DownloaderOptions(**opts),
                     loop=loop,
                 )
+
+                # Attach progress handler
+                def on_progress(handler: SongTracker, message=""):
+                    if handler.song:
+                        song_id = handler.song.json["song_id"]
+                        DownloadSong.objects.filter(
+                            sid=song_id, task_id=task_id
+                        ).update(progress=handler.progress, message=message)
 
                 downloader.progress_handler = ProgressHandler(
                     simple_tui=True, update_callback=on_progress
@@ -327,42 +355,18 @@ class DownloadSongAPIView(APIView):
 
                 # f) Perform the download (blocking)
                 downloader.download_multiple_songs(song_list)
-
                 loop.stop()
 
-                # g) Gather all downloaded media files
-                all_files = []
-                for root, _, files in os.walk(settings.MEDIA_ROOT):
-                    for fn in files:
-                        if fn.endswith((".mp3", ".lrc")):
-                            all_files.append(os.path.join(root, fn))
+                # e) Gather downloaded files, create zip batches <= 50 MB
+                all_files = [
+                    os.path.join(settings.MEDIA_ROOT, f)
+                    for f in os.listdir(settings.MEDIA_ROOT)
+                    if f.endswith((".mp3", ".lrc"))
+                ]
+                batches = self.create_zip_batches(all_files)
 
-                # h) Split into batches <= 50 MiB
-                MAX_SIZE = 50 * 1024 * 1024
-                batches = []
-                current, cursize = [], 0
-                for fpath in all_files:
-                    fsz = os.path.getsize(fpath)
-                    # if single file > MAX, put it alone
-                    if fsz > MAX_SIZE:
-                        if current:
-                            batches.append(current)
-                            current, cursize = [], 0
-                        batches.append([fpath])
-                        continue
-                    # if adding would overflow, start new batch
-                    if cursize + fsz > MAX_SIZE:
-                        batches.append(current)
-                        current, cursize = [fpath], fsz
-                    else:
-                        current.append(fpath)
-                        cursize += fsz
-                if current:
-                    batches.append(current)
-
-                # i) Zip & upload each batch, collect public URLs
-                supa = get_supabase_client()
-                public_urls = []
+                # f) Zip & Upload each batch, collect public URLs
+                zip_names = []
                 for idx, batch in enumerate(batches, start=1):
                     zip_name = (
                         f"{task_id}_{idx}.zip" if len(batches) > 1 else f"{task_id}.zip"
@@ -373,35 +377,26 @@ class DownloadSongAPIView(APIView):
                             arc = os.path.relpath(full, settings.MEDIA_ROOT)
                             zipf.write(full, arc)
                     logger.info("Created ZIP batch %d: %s", idx, zip_path)
+                    zip_names.append(zip_name)
 
-                    # upload and get URL
-                    key = f"{task_id}/{zip_name}"
-                    with open(zip_path, "rb") as f:
-                        supa.storage.from_("downloads").upload(key, f)
-                    pu = supa.storage.from_("downloads").get_public_url(key)
-                    if pu.endswith("?"):
-                        pu = pu[:-1]
-                    public_urls.append(pu)
+                    # Delete the original files after zipping
+                    for full in batch:
+                        os.remove(full)
 
-                # j) Save the first URL or JSON‐encode the list if you need
-                url_dict = {k: v for k, v in enumerate(public_urls)}
+                # g) Save the download URLs to the database
                 DownloadTask.objects.filter(id=task_id).update(
-                    download_urls=json.dumps(url_dict)
+                    download_urls=json.dumps(zip_names)
                 )
-                logger.info(f"Upload complete, download URLs: {url_dict}")
 
             except Exception:
                 logger.exception("Download job failed")
-            finally:
-                logger.info("Running cleanup for task %s", task_id)
-                cleanup_spotdl_thread(spotdl)
                 clear_media_directory()
+            finally:
+                cleanup_spotdl_thread(spotdl)
                 cleanup_local_cookie(cookie_path)
                 cleanup_remote_cookie()
                 cleanup_event_loop(loop)
-                logger.info("Cleanup done for task %s", task_id)
 
-        # 3) Fire & forget the background job
         threading.Thread(target=download_job, daemon=True).start()
 
         return Response({"task_id": task_id, "songs": group_songs}, status=202)

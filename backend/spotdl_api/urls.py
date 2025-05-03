@@ -10,4 +10,5 @@ urlpatterns = [
         views.download_status,
         name="download_status",
     ),
+    path("download-zip/<str:zip_name>/", views.download_zip, name="download_zip"),
 ]

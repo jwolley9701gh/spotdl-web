@@ -32,6 +32,7 @@ export default function Home() {
   const [taskId, setTaskId] = useState<string | null>(null)
   const [tracks, setTracks] = useState<TrackProgress[]>([])
   const [downloadUrls, setDownloadUrls] = useState<string[]>([])
+  const [isDownloading, setIsDownloading] = useState(false);
   const [cookiesUploaded, setCookiesUploaded] = useState(false)
   const [message, setMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -181,6 +182,27 @@ export default function Home() {
     setCookiesUploaded(true)
     setActiveCard("url")
   }
+
+  const handleDownload = (zipName: string) => {
+    console.log("Downloading:", zipName)
+    setIsDownloading(true);
+    axios
+      .get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download-zip/${zipName}`, { responseType: "blob" }) // Fetch the file as a blob
+      .then((response) => {
+        const blob = new Blob([response.data], { type: "application/zip" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob); // Create a temporary URL for the Blob
+        link.download = zipName.split("/").pop() || "download.zip"; // Use the file name for download
+        document.body.appendChild(link); // Append the link to the DOM
+        link.click(); // Trigger the download
+        document.body.removeChild(link); // Remove the link after download
+        setIsDownloading(false);
+      })
+      .catch((err) => {
+        console.error("Download error:", err);
+        setIsDownloading(false);
+      });
+  };
 
   return (
     <div className="min-h-screen bg-spotify-green p-4 md:p-8 flex flex-col items-center justify-center">
@@ -377,33 +399,40 @@ export default function Home() {
                     </p>
 
                     {downloadUrls.length === 1 ? (
-                      <a
-                        href={downloadUrls[0]}
-                        download
-                        rel="noopener noreferrer"
+                      <button
+                        onClick={() => handleDownload(downloadUrls[0])}
+                        disabled={isDownloading}
                         className="px-6 py-2 bg-black text-white font-bold rounded-xl flex items-center justify-center space-x-2"
                       >
-                        <Download size={18} />
+                        {isDownloading ? (
+                          <Loader2 className="animate-spin" size={18} />
+                        ) : (
+                          <Download size={18} />
+                        )}
                         <span>DOWNLOAD ZIP</span>
-                      </a>
+                      </button>
                     ) : (
                       <div className="space-y-2">
                         {downloadUrls.map((url, index) => {
                           return (
-                            <a
+                            <button
                               key={url}
-                              href={url}
-                              download
-                              rel="noopener noreferrer"
+                              onClick={() => handleDownload(url)}
+                              disabled={isDownloading}
                               className="px-6 py-2 bg-black text-white font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-black/80 transition-colors"
                             >
-                              <Download size={18} />
+                              {isDownloading ? (
+                                <Loader2 className="animate-spin" size={18} />
+                              ) : (
+                                <Download size={18} />
+                              )}
                               <span>PART {index + 1} OF {downloadUrls.length}</span>
-                            </a>
+                            </button>
                           )
                         })}
                       </div>
-                    )}
+                    )
+                    }
                   </div>
                 )}
               </div>
