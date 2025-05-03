@@ -6,8 +6,6 @@ import { useState, useEffect } from "react"
 import axios from "axios"
 import CookieUpload from "@/components/CookieUpload"
 import { Music, Download, ArrowRight, Loader2, AlertCircle } from "lucide-react"
-import { json } from "stream/consumers"
-import { clear } from "console"
 
 axios.defaults.withCredentials = true
 
