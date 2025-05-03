@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import axios from "axios"
 import CookieUpload from "@/components/CookieUpload"
-import { Music, Download, ArrowRight, Loader2, AlertCircle } from "lucide-react"
+import { Download, ArrowRight, Loader2, AlertCircle, AudioLines } from "lucide-react"
 
 axios.defaults.withCredentials = true
 
@@ -151,7 +151,6 @@ export default function Home() {
           clearInterval(interval)
           const downloadUrls: string[] = Object.values(JSON.parse(data.download_urls))
           setDownloadUrls(downloadUrls)
-          console.log("Download URLs:", downloadUrls, "type:", typeof downloadUrls)
           return
         }
 
@@ -188,10 +187,10 @@ export default function Home() {
     <div className="min-h-screen bg-spotify-green p-4 md:p-8 flex flex-col items-center justify-center">
       <div className="w-full max-w-6xl bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-800">
         {/* Header */}
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-spotify-green flex items-center justify-center">
-              <Music className="h-5 w-5 text-black" />
+              <AudioLines className="h-5 w-5 text-black" />
             </div>
             <span className="text-white font-bold">SPOTDL WEB</span>
           </div>
@@ -201,19 +200,15 @@ export default function Home() {
             <span className="text-zinc-400 text-sm">ABOUT</span>
             <span className="text-zinc-400 text-sm">HELP</span>
           </div>
-
-          <div className="bg-spotify-green px-4 py-1 rounded-full">
-            <span className="text-black text-sm font-bold">WEB APP</span>
-          </div>
         </div>
 
         {/* Hero */}
         <div className="px-6 py-12 md:py-16 flex flex-col items-center">
-          <h1 className="text-5xl md:text-7xl font-extrabold text-white tracking-tighter mb-2">
+          <h1 className="text-5xl md:text-7xl font-extrabold text-white tracking-tighter text-center mb-2">
             DOWNLOAD <span className="text-spotify-green">MUSIC</span>
           </h1>
           <p className="text-zinc-400 text-lg md:text-xl max-w-2xl text-center mb-8">
-            Get your favorite Spotify tracks and playlists in high quality MP3 format
+            Get your favorite Spotify tracks and playlists in MP3 format
           </p>
         </div>
 
@@ -229,7 +224,7 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "cookies" ? "text-black" : "text-white"}`}>
                 UPLOAD COOKIES
               </h2>
-              <span className={`text-sm ${activeCard === "cookies" ? "text-black/70" : "text-zinc-400"}`}>STEP 1</span>
+              <span className={`text-sm text-center ${activeCard === "cookies" ? "text-black/70" : "text-zinc-400"}`}>STEP 1</span>
             </div>
 
             {activeCard === "cookies" ? (
@@ -261,7 +256,7 @@ export default function Home() {
           >
             <div className="flex justify-between items-start mb-4">
               <h2 className={`text-3xl font-bold ${activeCard === "url" ? "text-black" : "text-white"}`}>ENTER URL</h2>
-              <span className={`text-sm ${activeCard === "url" ? "text-black/70" : "text-zinc-400"}`}>STEP 2</span>
+              <span className={`text-sm text-center ${activeCard === "url" ? "text-black/70" : "text-zinc-400"}`}>STEP 2</span>
             </div>
 
             {activeCard === "url" ? (
@@ -342,7 +337,7 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "download" ? "text-black" : "text-white"}`}>
                 DOWNLOAD
               </h2>
-              <span className={`text-sm ${activeCard === "download" ? "text-black/70" : "text-zinc-400"}`}>STEP 3</span>
+              <span className={`text-sm text-center ${activeCard === "download" ? "text-black/70" : "text-zinc-400"}`}>STEP 3</span>
             </div>
 
             {activeCard === "download" ? (
