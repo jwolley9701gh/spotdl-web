@@ -5,4 +5,9 @@ urlpatterns = [
     path("csrf/", views.csrf, name="csrf"),
     path("upload-cookies/", views.upload_cookies, name="upload_cookies"),
     path("download/", views.DownloadSongAPIView.as_view()),
+    path(
+        "download-status/<uuid:task_id>/",
+        views.download_status,
+        name="download_status",
+    ),
 ]

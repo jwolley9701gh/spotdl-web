@@ -1,3 +1,4 @@
+import json
 import os
 import threading
 import uuid
@@ -9,10 +10,11 @@ import zipfile
 
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
-from django.core.cache import cache
+from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from django.middleware.csrf import get_token
+from django.db.utils import IntegrityError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -26,11 +28,11 @@ from spotdl.types.song import Song
 from spotdl.types.playlist import Playlist
 from spotdl.types.album import Album
 from spotdl.types.artist import Artist
-from spotdl.download.progress_handler import ProgressHandler
+from spotdl.download.progress_handler import ProgressHandler, SongTracker
 
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
-from .models import DownloadTask
+from .models import DownloadSong, DownloadTask
 from .crypto import decrypt_bytes, encrypt_bytes
 
 logger = logging.getLogger("spotdl_api")
@@ -144,35 +146,61 @@ def upload_cookies(request: HttpRequest):
         cleanup_local_cookie(enc_path)
 
 
-# TODO: client & server size checking of url & cookie file
-def get_song_list(url):
-    auth_manager = SpotifyClientCredentials(
-        client_id=settings.SPOTIFY_CLIENT_ID,
-        client_secret=settings.SPOTIFY_CLIENT_SECRET,
-    )
-    sp = spotipy.Spotify(auth_manager=auth_manager)
-    if "track" in url:
-        track = sp.track(url)
-        meta = {
-            "song_id": track["id"],
-            "name": track["name"],
+# ─── Download Status Endpoint ────────────────────────────────────────────────────
+
+
+@require_http_methods(["GET"])
+def download_status(request, task_id):
+    # get all songs for this task
+    song_objs = DownloadSong.objects.filter(task_id=task_id)
+    task_obj = get_object_or_404(DownloadTask, id=task_id)
+    return JsonResponse(
+        {
+            "download_urls": task_obj.download_urls,
+            "songs": [
+                {
+                    "id": song.sid,
+                    "name": song.name,
+                    "progress": song.progress,
+                    "message": song.message,
+                }
+                for song in song_objs
+            ],
         }
-        return [meta]
-    elif "playlist" in url:
-        tracks = sp.playlist_tracks(url)
-        all_meta = []
-        for item in tracks["items"]:
-            track = item["track"]
+    )
+
+
+# ─── Download Song Endpoint ──────────────────────────────────────────────────────
+
+
+class DownloadSongAPIView(APIView):
+    # TODO: client & server size checking of url & cookie file
+    def get_song_list(self, url):
+        auth_manager = SpotifyClientCredentials(
+            client_id=settings.SPOTIFY_CLIENT_ID,
+            client_secret=settings.SPOTIFY_CLIENT_SECRET,
+        )
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+        if "track" in url:
+            track = sp.track(url)
             meta = {
                 "song_id": track["id"],
                 "name": track["name"],
             }
-            all_meta.append(meta)
-        return all_meta
-    # TODO: Add support for album and artist URLs
+            return [meta]
+        elif "playlist" in url:
+            tracks = sp.playlist_tracks(url)
+            all_meta = []
+            for item in tracks["items"]:
+                track = item["track"]
+                meta = {
+                    "song_id": track["id"],
+                    "name": track["name"],
+                }
+                all_meta.append(meta)
+            return all_meta
+        # TODO: Add support for album and artist URLs
 
-
-class DownloadSongAPIView(APIView):
     def post(self, request):
         url = request.data.get("url")
         if not url:
@@ -182,12 +210,23 @@ class DownloadSongAPIView(APIView):
         task_id = str(uuid.uuid4())
         DownloadTask.objects.create(id=task_id, url=url)
 
-        # prepare WebSocket group
-        channel_layer = get_channel_layer()
-        group = f"download_{task_id}"
-
         # get song metadata for frontend
-        group_songs = get_song_list(url)
+        group_songs = self.get_song_list(url)
+        # create DownloadSong records
+        for song in group_songs:
+            try:
+                DownloadSong.objects.create(
+                    sid=song["song_id"],
+                    task_id=task_id,
+                    name=song["name"],
+                    progress=0,
+                    message="",
+                )
+            except IntegrityError:
+                # if the song already exists, just update the task_id and initialize progress
+                DownloadSong.objects.filter(sid=song["song_id"]).update(
+                    task_id=task_id, progress=0, message=""
+                )
 
         # 2) Background job
         def download_job():
@@ -245,15 +284,21 @@ class DownloadSongAPIView(APIView):
                     logger.warning("SpotifyClient not re-initialised: %s", e)
 
                 # d) Attach progress handler
-                def ws_callback(handler, message=""):
-                    data = {
-                        "progress": int(handler.progress),
-                        "message": message,
-                        "song": handler.song.json,
-                    }
-                    async_to_sync(channel_layer.group_send)(
-                        group, {"type": "progress_update", "data": data}
-                    )
+                def on_progress(handler: SongTracker, message=""):
+                    if handler.song:
+                        song_id = handler.song.json["song_id"]
+                        # Update progress in DB
+                        try:
+                            DownloadSong.objects.filter(
+                                sid=song_id, task_id=task_id
+                            ).update(
+                                progress=handler.progress,
+                                message=message,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to update progress for song %s", song_id
+                            )
 
                 # Initialize downloader
                 downloader = Downloader(
@@ -262,7 +307,7 @@ class DownloadSongAPIView(APIView):
                 )
 
                 downloader.progress_handler = ProgressHandler(
-                    simple_tui=True, update_callback=ws_callback
+                    simple_tui=True, update_callback=on_progress
                 )
 
                 # e) Build Song list
@@ -337,28 +382,13 @@ class DownloadSongAPIView(APIView):
                     public_urls.append(pu)
 
                 # j) Save the first URL or JSON‐encode the list if you need
+                url_dict = {k: v for k, v in enumerate(public_urls)}
                 DownloadTask.objects.filter(id=task_id).update(
-                    download_url=public_urls[0] if public_urls else ""
-                )
-
-                # k) Notify frontend of completion with _all_ URLs
-                async_to_sync(channel_layer.group_send)(
-                    group,
-                    {
-                        "type": "download_complete",
-                        "data": {"download_urls": public_urls},
-                    },
+                    download_urls=json.dumps(url_dict)
                 )
 
             except Exception:
                 logger.exception("Download job failed")
-                async_to_sync(channel_layer.group_send)(
-                    group,
-                    {
-                        "type": "progress_update",
-                        "data": {"message": "error", "progress": 0},
-                    },
-                )
             finally:
                 logger.info("Running cleanup for task %s", task_id)
                 cleanup_spotdl_thread(spotdl)

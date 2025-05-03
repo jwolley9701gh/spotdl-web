@@ -6,6 +6,8 @@ import { useState, useEffect } from "react"
 import axios from "axios"
 import CookieUpload from "@/components/CookieUpload"
 import { Music, Download, ArrowRight, Loader2, AlertCircle } from "lucide-react"
+import { json } from "stream/consumers"
+import { clear } from "console"
 
 axios.defaults.withCredentials = true
 
@@ -136,56 +138,48 @@ export default function Home() {
     }
   }
 
-  // WebSocket for per‐song progress + final download_url
+  // Polling for per‐song progress + final download_urls
   useEffect(() => {
     if (!taskId) return
 
-    // Sanitize backend URL
-    const back = process.env.NEXT_PUBLIC_BACKEND_URL!
-    const wsProto = back.startsWith("https") ? "wss" : "ws"
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await axios.get(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download-status/${taskId}/`
+        )
 
-    try {
-      const ws = new WebSocket(`${wsProto}://${back.replace(/^https?:\/\//, "")}/ws/download/${taskId}/`)
-
-      ws.onmessage = (evt) => {
-        try {
-          const data = JSON.parse(evt.data)
-
-          if ("download_urls" in data) {
-            setDownloadUrls(data.download_urls)
-            return
-          }
-
-          const update = data as {
-            song: SongMeta
-            progress: number
-            message: string
-          }
-
-          // update the matching track's progress
-          setTracks((prev) =>
-            prev.map((t) =>
-              t.song.song_id === update.song.song_id ? { ...t, progress: update.progress, message: update.message } : t,
-            ),
-          )
-        } catch (error) {
-          console.error("Error processing WebSocket message:", error)
+        if (data.download_urls) {
+          // convert json to array
+          clearInterval(interval)
+          const downloadUrls: string[] = Object.values(JSON.parse(data.download_urls))
+          setDownloadUrls(downloadUrls)
+          console.log("Download URLs:", downloadUrls, "type:", typeof downloadUrls)
+          return
         }
-      }
 
-      ws.onerror = () => {
-        console.error("WebSocket error")
-        setMessage("WebSocket connection error")
-      }
+        const songs: Array<{
+          id: string
+          name: string
+          progress: number
+          message: string
+        }> = data.songs
 
-      return () => {
-        ws.close()
+        // 2) update each track’s progress/message
+        setTracks(
+          songs.map((s) => ({
+            song: { song_id: s.id, name: s.name },
+            progress: s.progress,
+            message: s.message,
+          }))
+        )
+      } catch (err) {
+        console.error("Polling error:", err)
       }
-    } catch (error) {
-      console.error("Error establishing WebSocket connection:", error)
-      setMessage("Failed to establish connection to server")
-    }
+    }, 3000)
+
+    return () => clearInterval(interval)
   }, [taskId])
+
 
   const handleCookieUploadSuccess = () => {
     setCookiesUploaded(true)
