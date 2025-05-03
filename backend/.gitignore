@@ -3,6 +3,7 @@ __pycache__
 *.pyc
 *.log
 *.mp3
+*.lrc
 cookies.txt
 .cache
 .env.prod

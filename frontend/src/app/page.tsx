@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import axios from "axios"
 import CookieUpload from "@/components/CookieUpload"
-import { Music, Download, ArrowRight, Loader2 } from "lucide-react"
+import { Music, Download, ArrowRight, Loader2, AlertCircle } from "lucide-react"
 
 axios.defaults.withCredentials = true
 
@@ -20,16 +20,23 @@ interface TrackProgress {
   message: string
 }
 
+// URL validation patterns
+const SPOTIFY_URL_PATTERN =
+  /^(https?:\/\/)?(open\.spotify\.com\/(track|album|playlist|artist)\/[a-zA-Z0-9]+|spotify:(track|album|playlist|artist):[a-zA-Z0-9]+)(\?.*)?$/
+const YOUTUBE_URL_PATTERN =
+  /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|music\.youtube\.com\/watch\?v=)[a-zA-Z0-9_-]+(&.*)?$/
+
 export default function Home() {
   const [url, setUrl] = useState("")
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [tracks, setTracks] = useState<TrackProgress[]>([])
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+  const [downloadUrls, setDownloadUrls] = useState<string[]>([])
   const [cookiesUploaded, setCookiesUploaded] = useState(false)
   const [message, setMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [activeCard, setActiveCard] = useState<"cookies" | "url" | "download">("cookies")
+  const [urlError, setUrlError] = useState<string | null>(null)
 
   // Fetch CSRF token once on mount
   useEffect(() => {
@@ -39,6 +46,37 @@ export default function Home() {
       .catch(() => console.error("Failed to fetch CSRF token"))
   }, [])
 
+  // Validate URL input
+  const validateUrl = (input: string): boolean => {
+    // Trim and sanitize the input
+    const sanitizedUrl = input.trim()
+
+    if (!sanitizedUrl) {
+      setUrlError("Please enter a URL")
+      return false
+    }
+
+    // Check if it's a valid Spotify or YouTube URL
+    if (!SPOTIFY_URL_PATTERN.test(sanitizedUrl) && !YOUTUBE_URL_PATTERN.test(sanitizedUrl)) {
+      setUrlError("Please enter a valid Spotify or YouTube Music URL")
+      return false
+    }
+
+    setUrlError(null)
+    return true
+  }
+
+  // Handle URL input change
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newUrl = e.target.value
+    setUrl(newUrl)
+
+    // Clear error when user starts typing again
+    if (urlError) {
+      setUrlError(null)
+    }
+  }
+
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,28 +85,51 @@ export default function Home() {
       setMessage("Please upload cookies before downloading")
       return
     }
+
     if (!csrfToken) {
       setMessage("Missing CSRF token")
       return
     }
+
+    // Validate URL before submission
+    if (!validateUrl(url)) {
+      return
+    }
+
     setMessage("")
-    setDownloadUrl(null)
+    setDownloadUrls([])
     setIsLoading(true)
 
     try {
+      // Sanitize URL before sending to server
+      const sanitizedUrl = url.trim()
+
       const res = await axios.post(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download/`,
-        { url },
-        { headers: { "X-CSRFToken": csrfToken } },
+        { url: sanitizedUrl },
+        {
+          headers: {
+            "X-CSRFToken": csrfToken,
+            "Content-Type": "application/json",
+          },
+        },
       )
+
+      // Validate response data
+      if (!res.data || !res.data.task_id || !Array.isArray(res.data.songs)) {
+        throw new Error("Invalid response from server")
+      }
+
       const { task_id, songs } = res.data as {
         task_id: string
         songs: SongMeta[]
       }
+
       setTaskId(task_id)
       setTracks(songs.map((s) => ({ song: s, progress: 0, message: "" })))
       setActiveCard("download")
     } catch (err) {
+      console.error("Download error:", err)
       setMessage(axios.isAxiosError(err) ? err.response?.data?.error || "Download failed" : "Unexpected error")
     } finally {
       setIsLoading(false)
@@ -78,38 +139,51 @@ export default function Home() {
   // WebSocket for per‐song progress + final download_url
   useEffect(() => {
     if (!taskId) return
+
+    // Sanitize backend URL
     const back = process.env.NEXT_PUBLIC_BACKEND_URL!
     const wsProto = back.startsWith("https") ? "wss" : "ws"
-    const ws = new WebSocket(`${wsProto}://${back.replace(/^https?:\/\//, "")}/ws/download/${taskId}/`)
 
-    ws.onmessage = (evt) => {
-      const data = JSON.parse(evt.data)
+    try {
+      const ws = new WebSocket(`${wsProto}://${back.replace(/^https?:\/\//, "")}/ws/download/${taskId}/`)
 
-      if ("download_url" in data) {
-        setDownloadUrl(data.download_url)
-        return
+      ws.onmessage = (evt) => {
+        try {
+          const data = JSON.parse(evt.data)
+
+          if ("download_urls" in data) {
+            setDownloadUrls(data.download_urls)
+            return
+          }
+
+          const update = data as {
+            song: SongMeta
+            progress: number
+            message: string
+          }
+
+          // update the matching track's progress
+          setTracks((prev) =>
+            prev.map((t) =>
+              t.song.song_id === update.song.song_id ? { ...t, progress: update.progress, message: update.message } : t,
+            ),
+          )
+        } catch (error) {
+          console.error("Error processing WebSocket message:", error)
+        }
       }
 
-      const update = data as {
-        song: SongMeta
-        progress: number
-        message: string
+      ws.onerror = () => {
+        console.error("WebSocket error")
+        setMessage("WebSocket connection error")
       }
-      // update the matching track's progress
-      setTracks((prev) =>
-        prev.map((t) =>
-          t.song.song_id === update.song.song_id ? { ...t, progress: update.progress, message: update.message } : t,
-        ),
-      )
-    }
 
-    ws.onerror = () => {
-      console.error("WebSocket error")
-      setMessage("WebSocket connection error")
-    }
-
-    return () => {
-      ws.close()
+      return () => {
+        ws.close()
+      }
+    } catch (error) {
+      console.error("Error establishing WebSocket connection:", error)
+      setMessage("Failed to establish connection to server")
     }
   }, [taskId])
 
@@ -173,7 +247,7 @@ export default function Home() {
             ) : (
               <>
                 <p className={`text-lg mb-6 ${cookiesUploaded ? "text-green-400" : "text-zinc-400"}`}>
-                  {cookiesUploaded ? "✓ Cookies uploaded successfully" : "Upload your Spotify cookies file"}
+                  {cookiesUploaded ? "✓ Cookies uploaded successfully" : "Upload your cookies file"}
                 </p>
                 <div className="mt-auto">
                   <button
@@ -201,13 +275,24 @@ export default function Home() {
             {activeCard === "url" ? (
               <div className="flex-grow">
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <input
-                    className="w-full p-3 bg-black/20 border-2 border-black/30 rounded-xl text-black placeholder-black/50 focus:outline-none focus:border-black"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="Spotify track/playlist URL"
-                    required
-                  />
+                  <div>
+                    <input
+                      className={`w-full p-3 bg-black/20 border-2 ${urlError ? "border-red-500" : "border-black/30"
+                        } rounded-xl text-black placeholder-black/50 focus:outline-none focus:border-black`}
+                      value={url}
+                      onChange={handleUrlChange}
+                      placeholder="Spotify track / playlist URL"
+                      required
+                      aria-invalid={urlError ? "true" : "false"}
+                      aria-describedby={urlError ? "url-error" : undefined}
+                    />
+                    {urlError && (
+                      <div id="url-error" className="mt-2 flex items-center text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {urlError}
+                      </div>
+                    )}
+                  </div>
 
                   <button
                     type="submit"
@@ -299,24 +384,47 @@ export default function Home() {
                   </div>
                 )}
 
-                {downloadUrl && (
+                {downloadUrls.length > 0 && (
                   <div className="mt-6 p-4 bg-black/10 rounded-xl flex flex-col items-center space-y-3">
-                    <p className="text-black font-bold">Your download is ready!</p>
-                    <a
-                      href={downloadUrl}
-                      download
-                      className="px-6 py-2 bg-black text-white font-bold rounded-xl flex items-center space-x-2"
-                    >
-                      <Download size={18} />
-                      <span>DOWNLOAD ZIP</span>
-                    </a>
+                    <p className="text-black font-bold">
+                      Your download{downloadUrls.length > 1 ? "s are" : " is"} ready!
+                    </p>
+
+                    {downloadUrls.length === 1 ? (
+                      <a
+                        href={downloadUrls[0]}
+                        download
+                        rel="noopener noreferrer"
+                        className="px-6 py-2 bg-black text-white font-bold rounded-xl flex items-center justify-center space-x-2"
+                      >
+                        <Download size={18} />
+                        <span>DOWNLOAD ZIP</span>
+                      </a>
+                    ) : (
+                      <div className="space-y-2">
+                        {downloadUrls.map((url, index) => {
+                          return (
+                            <a
+                              key={url}
+                              href={url}
+                              download
+                              rel="noopener noreferrer"
+                              className="px-6 py-2 bg-black text-white font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-black/80 transition-colors"
+                            >
+                              <Download size={18} />
+                              <span>PART {index + 1} OF {downloadUrls.length}</span>
+                            </a>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             ) : (
               <>
                 <p className="text-lg mb-6 text-zinc-400">
-                  {downloadUrl ? "Your download is ready" : "Track download progress"}
+                  {downloadUrls.length > 0 ? "Your download is ready" : "Track download progress"}
                 </p>
                 <div className="mt-auto">
                   <button
@@ -334,9 +442,22 @@ export default function Home() {
 
         {/* Footer */}
         <div className="p-6 border-t border-zinc-800 flex justify-between items-center">
-          <p className="text-zinc-500 text-sm">© 2025 SpotDL Web • GUI for <a href="https://github.com/spotDL/spotify-downloader">spotDL</a></p>
+          <p className="text-zinc-500 text-sm">
+            © 2025 SpotDL Web • GUI for{" "}
+            <a
+              href="https://github.com/spotDL/spotify-downloader"
+              rel="noopener noreferrer"
+              className="hover:text-zinc-300"
+            >
+              spotDL
+            </a>
+          </p>
           <div className="flex space-x-4">
-            <a href="https://github.com/jwolley9701gh/spotdl-web" className="text-zinc-400 hover:text-white">
+            <a
+              href="https://github.com/jwolley9701gh/spotdl-web"
+              rel="noopener noreferrer"
+              className="text-zinc-400 hover:text-white"
+            >
               GitHub
             </a>
             <a href="#" className="text-zinc-400 hover:text-white">

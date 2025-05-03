@@ -201,6 +201,13 @@ class DownloadSongAPIView(APIView):
                     "cookie.txt"
                 )
                 data = decrypt_bytes(enc_data)
+
+                plaintext = data.decode(errors="ignore")  # assume UTF-8
+                lines = plaintext.splitlines()
+                logger.debug(
+                    "Decrypted cookies.txt (first line):\n%s", "\n".join(lines[:1])
+                )
+
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
                 tmp.write(data)
                 tmp.flush()
@@ -278,38 +285,68 @@ class DownloadSongAPIView(APIView):
 
                 loop.stop()
 
-                # g) Zip up into MEDIA_ROOT/<task_id>.zip
-                zip_path = os.path.join(settings.MEDIA_ROOT, f"{task_id}.zip")
-                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                    for root, _, files in os.walk(settings.MEDIA_ROOT):
-                        for fn in files:
-                            if fn.endswith((".mp3", ".lrc")):
-                                full = os.path.join(root, fn)
-                                arc = os.path.relpath(full, settings.MEDIA_ROOT)
-                                zipf.write(full, arc)
-                logger.info("Created ZIP: %s", zip_path)
+                # g) Gather all downloaded media files
+                all_files = []
+                for root, _, files in os.walk(settings.MEDIA_ROOT):
+                    for fn in files:
+                        if fn.endswith((".mp3", ".lrc")):
+                            all_files.append(os.path.join(root, fn))
 
-                # h) Upload ZIP to Supabase
+                # h) Split into batches <= 50 MiB
+                MAX_SIZE = 50 * 1024 * 1024
+                batches = []
+                current, cursize = [], 0
+                for fpath in all_files:
+                    fsz = os.path.getsize(fpath)
+                    # if single file > MAX, put it alone
+                    if fsz > MAX_SIZE:
+                        if current:
+                            batches.append(current)
+                            current, cursize = [], 0
+                        batches.append([fpath])
+                        continue
+                    # if adding would overflow, start new batch
+                    if cursize + fsz > MAX_SIZE:
+                        batches.append(current)
+                        current, cursize = [fpath], fsz
+                    else:
+                        current.append(fpath)
+                        cursize += fsz
+                if current:
+                    batches.append(current)
+
+                # i) Zip & upload each batch, collect public URLs
                 supa = get_supabase_client()
-                with open(zip_path, "rb") as f:
-                    # check zip_path exists
-                    if not os.path.exists(zip_path):
-                        logger.error("Zip file does not exist: %s", zip_path)
-                        raise FileNotFoundError(f"Zip file does not exist: {zip_path}")
-                    key = f"{task_id}/{os.path.basename(zip_path)}"
-                    supa.storage.from_("downloads").upload(key, f)
-                    public_url = supa.storage.from_("downloads").get_public_url(key)
-                    logger.info("Public URL: %s", public_url)
+                public_urls = []
+                for idx, batch in enumerate(batches, start=1):
+                    zip_name = (
+                        f"{task_id}_{idx}.zip" if len(batches) > 1 else f"{task_id}.zip"
+                    )
+                    zip_path = os.path.join(settings.MEDIA_ROOT, zip_name)
+                    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                        for full in batch:
+                            arc = os.path.relpath(full, settings.MEDIA_ROOT)
+                            zipf.write(full, arc)
+                    logger.info("Created ZIP batch %d: %s", idx, zip_path)
 
-                # i) Save in DB
-                DownloadTask.objects.filter(id=task_id).update(download_url=public_url)
+                    # upload and get URL
+                    key = f"{task_id}/{zip_name}"
+                    with open(zip_path, "rb") as f:
+                        supa.storage.from_("downloads").upload(key, f)
+                    pu = supa.storage.from_("downloads").get_public_url(key)
+                    public_urls.append(pu)
 
-                # j) Notify frontend of completion
+                # j) Save the first URL or JSON‐encode the list if you need
+                DownloadTask.objects.filter(id=task_id).update(
+                    download_url=public_urls[0] if public_urls else ""
+                )
+
+                # k) Notify frontend of completion with _all_ URLs
                 async_to_sync(channel_layer.group_send)(
                     group,
                     {
                         "type": "download_complete",
-                        "data": {"download_url": public_url},
+                        "data": {"download_urls": public_urls},
                     },
                 )
 
