@@ -151,7 +151,6 @@ export default function Home() {
           clearInterval(interval)
           const downloadUrls: string[] = Object.values(JSON.parse(data.download_urls))
           setDownloadUrls(downloadUrls)
-          return
         }
 
         const songs: Array<{

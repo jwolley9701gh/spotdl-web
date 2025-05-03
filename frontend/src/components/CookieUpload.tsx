@@ -126,6 +126,7 @@ const CookieUpload = ({ csrfToken, onStatusChange }: CookieUploadProps) => {
                         <a
                             href="https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
                             className="text-black font-medium underline hover:text-spotify-light transition-colors mx-1"
+                            target="_blank"
                         >
                             Get cookies.txt
                         </a>
@@ -133,11 +134,13 @@ const CookieUpload = ({ csrfToken, onStatusChange }: CookieUploadProps) => {
                         <a
                             href="https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/"
                             className="text-black font-medium underline hover:text-spotify-light transition-colors mx-1"
+                            target="_blank"
                         >
                             cookies.txt</a> extension. More info
                         <a
                             href="https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp"
                             className="text-black font-medium underline hover:text-spotify-light transition-colors ml-1"
+                            target="_blank"
                         >
                             here
                         </a>.

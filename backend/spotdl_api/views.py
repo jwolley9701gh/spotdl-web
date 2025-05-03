@@ -379,6 +379,8 @@ class DownloadSongAPIView(APIView):
                     with open(zip_path, "rb") as f:
                         supa.storage.from_("downloads").upload(key, f)
                     pu = supa.storage.from_("downloads").get_public_url(key)
+                    if pu.endswith("?"):
+                        pu = pu[:-1]
                     public_urls.append(pu)
 
                 # j) Save the first URL or JSON‐encode the list if you need
@@ -386,6 +388,7 @@ class DownloadSongAPIView(APIView):
                 DownloadTask.objects.filter(id=task_id).update(
                     download_urls=json.dumps(url_dict)
                 )
+                logger.info(f"Upload complete, download URLs: {url_dict}")
 
             except Exception:
                 logger.exception("Download job failed")
