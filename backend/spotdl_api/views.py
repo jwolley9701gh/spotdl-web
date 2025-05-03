@@ -19,6 +19,63 @@ from rest_framework.response import Response
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
+
+# -- Monkey pach for ytmusicapi --
+# views.py (top of file)
+import logging
+import http.client as http_client
+
+# Turn on HTTPConnection debug output (for the stdlib http.client)
+http_client.HTTPConnection.debuglevel = 1
+
+# Configure the root logger to print DEBUG to the console
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s %(name)s %(levelname)s %(message)s"
+)
+
+# Enable verbose logging for urllib3 (used by requests) and ytmusicapi
+for logger_name in ("urllib3", "ytmusicapi"):
+    l = logging.getLogger(logger_name)
+    l.setLevel(logging.DEBUG)
+    l.propagate = True
+
+
+import logging, json
+from ytmusicapi.ytmusic import YTMusic
+
+# keep a reference to the original method
+_original_send = YTMusic._send_request
+
+
+def _debug_send(self, endpoint, body, **kwargs):
+    try:
+        # call the real one (which does json.loads under the hood)
+        return _original_send(self, endpoint, body, **kwargs)
+    except json.JSONDecodeError as e:
+        # if we got invalid JSON, do the raw HTTP again so we can log it
+        # (YTMusic keeps a requests.Session() in `self._session` or `self.session`)
+        # You may need to adjust `.session` vs `._session` depending on your ytmusicapi version:
+        sess = getattr(self, "session", getattr(self, "_session"))
+        # The real URL is built inside YTMusic; for simplicity, grab its attribute:
+        url = self._YTMUSIC_API_BASE  # usually "https://music.youtube.com/youtubei/v1"
+        # send the same request
+        resp = sess.post(f"{url}/{endpoint}", json=body, headers=self.headers)
+        logger.error(
+            "💥 YTMusic raw HTTP %s %s → %s\n%s",
+            resp.request.method,
+            resp.request.url,
+            resp.status_code,
+            resp.text[:2000].replace("\n", " "),
+        )
+        # re-raise so your normal flow still sees the JSON error
+        raise
+
+
+# install the patch
+YTMusic._send_request = _debug_send
+# -- End of monkey patch for ytmusicapi --
+
+
 from supabase import create_client
 from spotdl import SpotifyClient, Downloader
 from spotdl.types.options import DownloaderOptions
