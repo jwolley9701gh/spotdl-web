@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import threading
 import uuid
 import asyncio
@@ -29,9 +30,9 @@ from spotdl.types.playlist import Playlist
 from spotdl.types.album import Album
 from spotdl.types.artist import Artist
 from spotdl.download.progress_handler import ProgressHandler, SongTracker
+from spotdl.utils.search import parse_query
 
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from ytmusicapi import YTMusic
 from .models import DownloadSong, DownloadTask
 from .crypto import decrypt_bytes, encrypt_bytes
 
@@ -43,6 +44,18 @@ logging.getLogger("spotdl").setLevel(logging.DEBUG)
 
 def get_supabase_client():
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+
+
+def init_spotify_client():
+    try:
+        # Initialize spotify client
+        SpotifyClient.init(
+            client_id=settings.SPOTIFY_CLIENT_ID,
+            client_secret=settings.SPOTIFY_CLIENT_SECRET,
+        )
+
+    except Exception as e:
+        logger.warning("SpotifyClient not re-initialised: %s", e)
 
 
 def clear_media_directory():
@@ -196,31 +209,10 @@ def download_zip(request, zip_name):
 
 class DownloadSongAPIView(APIView):
     # TODO: client & server size checking of url & cookie file
-    def get_song_list(self, url):
-        auth_manager = SpotifyClientCredentials(
-            client_id=settings.SPOTIFY_CLIENT_ID,
-            client_secret=settings.SPOTIFY_CLIENT_SECRET,
-        )
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-        if "track" in url:
-            track = sp.track(url)
-            meta = {
-                "song_id": track["id"],
-                "name": track["name"],
-            }
-            return [meta]
-        elif "playlist" in url:
-            tracks = sp.playlist_tracks(url)
-            all_meta = []
-            for item in tracks["items"]:
-                track = item["track"]
-                meta = {
-                    "song_id": track["id"],
-                    "name": track["name"],
-                }
-                all_meta.append(meta)
-            return all_meta
-        # TODO: Add support for album and artist URLs
+    def get_song_list(self, query):
+        logger.debug("Getting song list for query: %s", query)
+        init_spotify_client()
+        return parse_query([query])
 
     def create_zip_batches(self, files):
         """Create zip batches for files, ensuring each batch is <= 50MB."""
@@ -246,32 +238,41 @@ class DownloadSongAPIView(APIView):
         return batches
 
     def post(self, request):
+        # Clean up the media directory before starting a new download
+        clear_media_directory()
+
         url = request.data.get("url")
         if not url:
             return Response({"error": "URL is required"}, status=400)
-
-        # Clean up the media directory before starting a new download
-        clear_media_directory()
 
         # 1) Create DB record
         task_id = str(uuid.uuid4())
         DownloadTask.objects.create(id=task_id, url=url)
 
         # Get song metadata for frontend
-        group_songs = self.get_song_list(url)
+        song_list = self.get_song_list(url)
+        # convert to list of dicts
+        group_songs = [
+            {
+                "name": song.json["name"],
+                "song_id": song.json["song_id"],
+            }
+            for song in song_list
+        ]
 
         # Create DownloadSong records
-        for song in group_songs:
+        for song in song_list:
+            logger.debug("Creating DownloadSong record for %s", song.json)
             try:
                 DownloadSong.objects.create(
-                    sid=song["song_id"],
+                    sid=song.json["song_id"],
                     task_id=task_id,
-                    name=song["name"],
+                    name=song.json["name"],
                     progress=0,
                     message="",
                 )
             except IntegrityError:
-                DownloadSong.objects.filter(sid=song["song_id"]).update(
+                DownloadSong.objects.filter(sid=song.json["song_id"]).update(
                     task_id=task_id, progress=0, message=""
                 )
 
@@ -279,7 +280,7 @@ class DownloadSongAPIView(APIView):
         def download_job():
             cookie_path = None
             loop = None
-            spotdl = None
+            downloader = None
             try:
                 # a) Download cookie file into temp file
                 supa = get_supabase_client()
@@ -303,7 +304,8 @@ class DownloadSongAPIView(APIView):
                 opts = {
                     "log_level": "DEBUG",
                     "cookie_file": cookie_path,
-                    "bitrate": "132k",
+                    "bitrate": "auto",
+                    "format": "opus",
                     "generate_lrc": True,
                     "ffmpeg": ffmpeg_path,
                     "output": os.path.join(
@@ -312,15 +314,8 @@ class DownloadSongAPIView(APIView):
                     "yt_dlp_args": f"--no-quiet --verbose",
                     "simple_tui": True,
                 }
-                try:
-                    # Initialize spotify client
-                    SpotifyClient.init(
-                        client_id=settings.SPOTIFY_CLIENT_ID,
-                        client_secret=settings.SPOTIFY_CLIENT_SECRET,
-                    )
+                init_spotify_client()
 
-                except Exception as e:
-                    logger.warning("SpotifyClient not re-initialised: %s", e)
                 downloader = Downloader(
                     settings=DownloaderOptions(**opts),
                     loop=loop,
@@ -338,21 +333,6 @@ class DownloadSongAPIView(APIView):
                     simple_tui=True, update_callback=on_progress
                 )
 
-                # e) Build Song list
-                if "track" in url:
-                    song_list = [Song.from_url(url)]
-                elif "playlist" in url:
-                    pl = Playlist.from_url(url)
-                    song_list = [Song.from_url(u) for u in pl.urls]
-                elif "album" in url:
-                    al = Album.from_url(url)
-                    song_list = [Song.from_url(u) for u in al.urls]
-                elif "artist" in url:
-                    ar = Artist.from_url(url)
-                    song_list = [Song.from_url(u) for u in ar.urls]
-                else:
-                    raise ValueError(f"Unsupported URL type: {url}")
-
                 # f) Perform the download (blocking)
                 downloader.download_multiple_songs(song_list)
                 loop.stop()
@@ -361,7 +341,7 @@ class DownloadSongAPIView(APIView):
                 all_files = [
                     os.path.join(settings.MEDIA_ROOT, f)
                     for f in os.listdir(settings.MEDIA_ROOT)
-                    if f.endswith((".mp3", ".lrc"))
+                    if f.endswith((".mp3", ".lrc", ".opus"))
                 ]
                 batches = self.create_zip_batches(all_files)
 
@@ -392,7 +372,7 @@ class DownloadSongAPIView(APIView):
                 logger.exception("Download job failed")
                 clear_media_directory()
             finally:
-                cleanup_spotdl_thread(spotdl)
+                cleanup_spotdl_thread(downloader)
                 cleanup_local_cookie(cookie_path)
                 cleanup_remote_cookie()
                 cleanup_event_loop(loop)

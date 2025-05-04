@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import axios from "axios"
 import CookieUpload from "@/components/CookieUpload"
-import { Download, ArrowRight, Loader2, AlertCircle, AudioLines } from "lucide-react"
+import { Download, ArrowRight, Loader2, AlertCircle, AudioLines, Music } from "lucide-react"
 
 axios.defaults.withCredentials = true
 
@@ -28,16 +28,19 @@ const YOUTUBE_URL_PATTERN =
 
 export default function Home() {
   const [url, setUrl] = useState("")
+  const [spotifyUrl, setSpotifyUrl] = useState("")
+  const [isYoutubeUrl, setIsYoutubeUrl] = useState(false)
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [tracks, setTracks] = useState<TrackProgress[]>([])
   const [downloadUrls, setDownloadUrls] = useState<string[]>([])
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null)
   const [cookiesUploaded, setCookiesUploaded] = useState(false)
   const [message, setMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [activeCard, setActiveCard] = useState<"cookies" | "url" | "download">("cookies")
   const [urlError, setUrlError] = useState<string | null>(null)
+  const [spotifyUrlError, setSpotifyUrlError] = useState<string | null>(null)
 
   // Fetch CSRF token once on mount
   useEffect(() => {
@@ -47,23 +50,40 @@ export default function Home() {
       .catch(() => console.error("Failed to fetch CSRF token"))
   }, [])
 
+  // Check if URL is YouTube and update state accordingly
+  useEffect(() => {
+    const trimmedUrl = url.trim()
+    if (YOUTUBE_URL_PATTERN.test(trimmedUrl)) {
+      setIsYoutubeUrl(true)
+    } else {
+      setIsYoutubeUrl(false)
+      setSpotifyUrl("")
+      setSpotifyUrlError(null)
+    }
+  }, [url])
+
   // Validate URL input
-  const validateUrl = (input: string): boolean => {
+  const validateUrl = (
+    input: string,
+    pattern: RegExp,
+    errorSetter: React.Dispatch<React.SetStateAction<string | null>>,
+    errorMessage: string,
+  ): boolean => {
     // Trim and sanitize the input
     const sanitizedUrl = input.trim()
 
     if (!sanitizedUrl) {
-      setUrlError("Please enter a URL")
+      errorSetter("Please enter a URL")
       return false
     }
 
-    // Check if it's a valid Spotify or YouTube URL
-    if (!SPOTIFY_URL_PATTERN.test(sanitizedUrl) && !YOUTUBE_URL_PATTERN.test(sanitizedUrl)) {
-      setUrlError("Please enter a valid Spotify or YouTube Music URL")
+    // Check if it's a valid URL according to the pattern
+    if (!pattern.test(sanitizedUrl)) {
+      errorSetter(errorMessage)
       return false
     }
 
-    setUrlError(null)
+    errorSetter(null)
     return true
   }
 
@@ -75,6 +95,17 @@ export default function Home() {
     // Clear error when user starts typing again
     if (urlError) {
       setUrlError(null)
+    }
+  }
+
+  // Handle Spotify URL input change
+  const handleSpotifyUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newUrl = e.target.value
+    setSpotifyUrl(newUrl)
+
+    // Clear error when user starts typing again
+    if (spotifyUrlError) {
+      setSpotifyUrlError(null)
     }
   }
 
@@ -92,9 +123,34 @@ export default function Home() {
       return
     }
 
-    // Validate URL before submission
-    if (!validateUrl(url)) {
+    // Validate primary URL
+    const isMainUrlValid = validateUrl(
+      url,
+      isYoutubeUrl ? YOUTUBE_URL_PATTERN : SPOTIFY_URL_PATTERN,
+      setUrlError,
+      isYoutubeUrl ? "Please enter a valid YouTube URL" : "Please enter a valid Spotify URL",
+    )
+
+    if (!isMainUrlValid) {
       return
+    }
+
+    // If YouTube URL, validate Spotify URL as well
+    let finalUrl = url.trim()
+    if (isYoutubeUrl) {
+      const isSpotifyUrlValid = validateUrl(
+        spotifyUrl,
+        SPOTIFY_URL_PATTERN,
+        setSpotifyUrlError,
+        "Please enter a valid Spotify URL",
+      )
+
+      if (!isSpotifyUrlValid) {
+        return
+      }
+
+      // Combine YouTube and Spotify URLs with a pipe character
+      finalUrl = `${url.trim()}|${spotifyUrl.trim()}`
     }
 
     setMessage("")
@@ -102,12 +158,9 @@ export default function Home() {
     setIsLoading(true)
 
     try {
-      // Sanitize URL before sending to server
-      const sanitizedUrl = url.trim()
-
       const res = await axios.post(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download/`,
-        { url: sanitizedUrl },
+        { url: finalUrl },
         {
           headers: {
             "X-CSRFToken": csrfToken,
@@ -143,9 +196,7 @@ export default function Home() {
 
     const interval = setInterval(async () => {
       try {
-        const { data } = await axios.get(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download-status/${taskId}/`
-        )
+        const { data } = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download-status/${taskId}/`)
 
         if (data.download_urls) {
           // convert json to array
@@ -161,13 +212,13 @@ export default function Home() {
           message: string
         }> = data.songs
 
-        // 2) update each track’s progress/message
+        // 2) update each track's progress/message
         setTracks(
           songs.map((s) => ({
             song: { song_id: s.id, name: s.name },
             progress: s.progress,
             message: s.message,
-          }))
+          })),
         )
       } catch (err) {
         console.error("Polling error:", err)
@@ -177,32 +228,31 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [taskId])
 
-
   const handleCookieUploadSuccess = () => {
     setCookiesUploaded(true)
     setActiveCard("url")
   }
 
-  const handleDownload = (zipName: string) => {
+  const handleDownload = (zipName: string, index: number) => {
     console.log("Downloading:", zipName)
-    setIsDownloading(true);
+    setDownloadingIndex(index)
     axios
-      .get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download-zip/${zipName}`, { responseType: "blob" }) // Fetch the file as a blob
+      .get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download-zip/${zipName}`, { responseType: "blob" })
       .then((response) => {
-        const blob = new Blob([response.data], { type: "application/zip" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob); // Create a temporary URL for the Blob
-        link.download = zipName.split("/").pop() || "download.zip"; // Use the file name for download
-        document.body.appendChild(link); // Append the link to the DOM
-        link.click(); // Trigger the download
-        document.body.removeChild(link); // Remove the link after download
-        setIsDownloading(false);
+        const blob = new Blob([response.data], { type: "application/zip" })
+        const link = document.createElement("a")
+        link.href = URL.createObjectURL(blob)
+        link.download = zipName.split("/").pop() || "download.zip"
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        setDownloadingIndex(null)
       })
       .catch((err) => {
-        console.error("Download error:", err);
-        setIsDownloading(false);
-      });
-  };
+        console.error("Download error:", err)
+        setDownloadingIndex(null)
+      })
+  }
 
   return (
     <div className="min-h-screen bg-spotify-green p-4 md:p-8 flex flex-col items-center justify-center">
@@ -245,7 +295,9 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "cookies" ? "text-black" : "text-white"}`}>
                 UPLOAD COOKIES
               </h2>
-              <span className={`text-sm text-center ${activeCard === "cookies" ? "text-black/70" : "text-zinc-400"}`}>STEP 1</span>
+              <span className={`text-sm text-center ${activeCard === "cookies" ? "text-black/70" : "text-zinc-400"}`}>
+                STEP 1
+              </span>
             </div>
 
             {activeCard === "cookies" ? (
@@ -277,19 +329,32 @@ export default function Home() {
           >
             <div className="flex justify-between items-start mb-4">
               <h2 className={`text-3xl font-bold ${activeCard === "url" ? "text-black" : "text-white"}`}>ENTER URL</h2>
-              <span className={`text-sm text-center ${activeCard === "url" ? "text-black/70" : "text-zinc-400"}`}>STEP 2</span>
+              <span className={`text-sm text-center ${activeCard === "url" ? "text-black/70" : "text-zinc-400"}`}>
+                STEP 2
+              </span>
             </div>
 
             {activeCard === "url" ? (
               <div className="flex-grow">
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      {isYoutubeUrl ? (
+                        <Music className="h-4 w-4 text-black/70" />
+                      ) : (
+                        <AudioLines className="h-4 w-4 text-black/70" />
+                      )}
+                      <label htmlFor="url" className="text-sm font-medium text-black/70">
+                        {isYoutubeUrl ? "YouTube URL" : "Spotify/YouTube URL"}
+                      </label>
+                    </div>
                     <input
+                      id="url"
                       className={`w-full p-3 bg-black/20 border-2 ${urlError ? "border-red-500" : "border-black/30"
                         } rounded-xl text-black placeholder-black/50 focus:outline-none focus:border-black`}
                       value={url}
                       onChange={handleUrlChange}
-                      placeholder="Spotify track / playlist URL"
+                      placeholder={isYoutubeUrl ? "YouTube Music URL" : "Spotify or YouTube URL"}
                       required
                       aria-invalid={urlError ? "true" : "false"}
                       aria-describedby={urlError ? "url-error" : undefined}
@@ -302,10 +367,41 @@ export default function Home() {
                     )}
                   </div>
 
+                  {isYoutubeUrl && (
+                    <div className="mt-4">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <AudioLines className="h-4 w-4 text-black/70" />
+                        <label htmlFor="spotify-url" className="text-sm font-medium text-black/70">
+                          Corresponding Spotify URL
+                        </label>
+                      </div>
+                      <input
+                        id="spotify-url"
+                        className={`w-full p-3 bg-black/20 border-2 ${spotifyUrlError ? "border-red-500" : "border-black/30"
+                          } rounded-xl text-black placeholder-black/50 focus:outline-none focus:border-black`}
+                        value={spotifyUrl}
+                        onChange={handleSpotifyUrlChange}
+                        placeholder="Enter the corresponding Spotify URL"
+                        required
+                        aria-invalid={spotifyUrlError ? "true" : "false"}
+                        aria-describedby={spotifyUrlError ? "spotify-url-error" : undefined}
+                      />
+                      {spotifyUrlError && (
+                        <div id="spotify-url-error" className="mt-2 flex items-center text-sm text-red-600">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {spotifyUrlError}
+                        </div>
+                      )}
+                      <p className="mt-2 text-xs text-black/70">
+                        For YouTube URLs, we need the corresponding Spotify URL to fetch accurate metadata.
+                      </p>
+                    </div>
+                  )}
+
                   <button
                     type="submit"
-                    disabled={!cookiesUploaded || !csrfToken || isLoading}
-                    className={`w-full p-3 rounded-xl text-white font-bold flex items-center justify-center space-x-2 ${!cookiesUploaded || !csrfToken || isLoading
+                    disabled={!cookiesUploaded || !csrfToken || isLoading || (isYoutubeUrl && !spotifyUrl)}
+                    className={`w-full p-3 rounded-xl text-white font-bold flex items-center justify-center space-x-2 ${!cookiesUploaded || !csrfToken || isLoading || (isYoutubeUrl && !spotifyUrl)
                       ? "bg-black/20 cursor-not-allowed"
                       : "bg-black hover:bg-black/80"
                       }`}
@@ -333,7 +429,7 @@ export default function Home() {
             ) : (
               <>
                 <p className="text-lg mb-6 text-zinc-400">
-                  {taskId ? "URL submitted for download" : "Enter your Spotify URL"}
+                  {taskId ? "URL submitted for download" : "Enter your music URL"}
                 </p>
                 <div className="mt-auto">
                   <button
@@ -358,7 +454,9 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "download" ? "text-black" : "text-white"}`}>
                 DOWNLOAD
               </h2>
-              <span className={`text-sm text-center ${activeCard === "download" ? "text-black/70" : "text-zinc-400"}`}>STEP 3</span>
+              <span className={`text-sm text-center ${activeCard === "download" ? "text-black/70" : "text-zinc-400"}`}>
+                STEP 3
+              </span>
             </div>
 
             {activeCard === "download" ? (
@@ -400,11 +498,11 @@ export default function Home() {
 
                     {downloadUrls.length === 1 ? (
                       <button
-                        onClick={() => handleDownload(downloadUrls[0])}
-                        disabled={isDownloading}
+                        onClick={() => handleDownload(downloadUrls[0], 0)}
+                        disabled={downloadingIndex !== null}
                         className="px-6 py-2 bg-black text-white font-bold rounded-xl flex items-center justify-center space-x-2"
                       >
-                        {isDownloading ? (
+                        {downloadingIndex === 0 ? (
                           <Loader2 className="animate-spin" size={18} />
                         ) : (
                           <Download size={18} />
@@ -417,22 +515,23 @@ export default function Home() {
                           return (
                             <button
                               key={url}
-                              onClick={() => handleDownload(url)}
-                              disabled={isDownloading}
+                              onClick={() => handleDownload(url, index)}
+                              disabled={downloadingIndex !== null}
                               className="px-6 py-2 bg-black text-white font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-black/80 transition-colors"
                             >
-                              {isDownloading ? (
+                              {downloadingIndex === index ? (
                                 <Loader2 className="animate-spin" size={18} />
                               ) : (
                                 <Download size={18} />
                               )}
-                              <span>PART {index + 1} OF {downloadUrls.length}</span>
+                              <span>
+                                PART {index + 1} OF {downloadUrls.length}
+                              </span>
                             </button>
                           )
                         })}
                       </div>
-                    )
-                    }
+                    )}
                   </div>
                 )}
               </div>
