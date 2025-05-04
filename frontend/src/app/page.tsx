@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import axios from "axios"
 import CookieUpload from "@/components/CookieUpload"
-import { Download, ArrowRight, Loader2, AlertCircle, AudioLines, Music } from "lucide-react"
+import { Download, ArrowRight, Loader2, AlertCircle, AudioLines, Music, Check } from "lucide-react"
 
 axios.defaults.withCredentials = true
 
@@ -19,6 +19,8 @@ interface TrackProgress {
   progress: number // 0–100
   message: string
 }
+
+type AudioFormat = "mp3" | "ogg" | "m4a"
 
 // URL validation patterns
 const SPOTIFY_URL_PATTERN =
@@ -41,6 +43,7 @@ export default function Home() {
   const [activeCard, setActiveCard] = useState<"cookies" | "url" | "download">("cookies")
   const [urlError, setUrlError] = useState<string | null>(null)
   const [spotifyUrlError, setSpotifyUrlError] = useState<string | null>(null)
+  const [audioFormat, setAudioFormat] = useState<AudioFormat>("mp3")
 
   // Fetch CSRF token once on mount
   useEffect(() => {
@@ -109,6 +112,11 @@ export default function Home() {
     }
   }
 
+  // Handle format change
+  const handleFormatChange = (format: AudioFormat) => {
+    setAudioFormat(format)
+  }
+
   // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -160,7 +168,10 @@ export default function Home() {
     try {
       const res = await axios.post(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/download/`,
-        { url: finalUrl },
+        {
+          url: finalUrl,
+          format: audioFormat,
+        },
         {
           headers: {
             "X-CSRFToken": csrfToken,
@@ -295,8 +306,11 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "cookies" ? "text-black" : "text-white"}`}>
                 UPLOAD COOKIES
               </h2>
-              <span className={`text-sm text-center ${activeCard === "cookies" ? "text-black/70" : "text-zinc-400"}`}>
-                STEP 1
+              <span
+                className={`flex items-center justify-center w-8 h-8 rounded-full ${activeCard === "cookies" ? "bg-black text-white" : "bg-zinc-700 text-zinc-400"
+                  } font-bold text-sm`}
+              >
+                1
               </span>
             </div>
 
@@ -329,8 +343,11 @@ export default function Home() {
           >
             <div className="flex justify-between items-start mb-4">
               <h2 className={`text-3xl font-bold ${activeCard === "url" ? "text-black" : "text-white"}`}>ENTER URL</h2>
-              <span className={`text-sm text-center ${activeCard === "url" ? "text-black/70" : "text-zinc-400"}`}>
-                STEP 2
+              <span
+                className={`flex items-center justify-center w-8 h-8 rounded-full ${activeCard === "url" ? "bg-black text-white" : "bg-zinc-700 text-zinc-400"
+                  } font-bold text-sm`}
+              >
+                2
               </span>
             </div>
 
@@ -398,6 +415,49 @@ export default function Home() {
                     </div>
                   )}
 
+                  {/* Format Selection */}
+                  <div className="mt-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <label className="text-sm font-medium text-black/70">Audio Format</label>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => handleFormatChange("mp3")}
+                        className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center space-x-1 transition-colors ${audioFormat === "mp3" ? "bg-black text-white" : "bg-black/20 text-black hover:bg-black/30"
+                          }`}
+                      >
+                        {audioFormat === "mp3" && <Check size={16} className="mr-1" />}
+                        <span>MP3</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatChange("ogg")}
+                        className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center space-x-1 transition-colors ${audioFormat === "ogg" ? "bg-black text-white" : "bg-black/20 text-black hover:bg-black/30"
+                          }`}
+                      >
+                        {audioFormat === "ogg" && <Check size={16} className="mr-1" />}
+                        <span>OGG</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFormatChange("m4a")}
+                        className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center space-x-1 transition-colors ${audioFormat === "m4a" ? "bg-black text-white" : "bg-black/20 text-black hover:bg-black/30"
+                          }`}
+                      >
+                        {audioFormat === "m4a" && <Check size={16} className="mr-1" />}
+                        <span>M4A</span>
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-black/70">
+                      {audioFormat === "mp3"
+                        ? "MP3: Universal compatibility with all devices and players"
+                        : audioFormat === "ogg"
+                          ? "OGG: Better audio quality at smaller file sizes"
+                          : "M4A: High quality audio with good compression (Apple format)"}
+                    </p>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={!cookiesUploaded || !csrfToken || isLoading || (isYoutubeUrl && !spotifyUrl)}
@@ -414,7 +474,7 @@ export default function Home() {
                     ) : (
                       <>
                         <Download size={20} />
-                        <span>DOWNLOAD</span>
+                        <span>DOWNLOAD {audioFormat.toUpperCase()}</span>
                       </>
                     )}
                   </button>
@@ -454,8 +514,11 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "download" ? "text-black" : "text-white"}`}>
                 DOWNLOAD
               </h2>
-              <span className={`text-sm text-center ${activeCard === "download" ? "text-black/70" : "text-zinc-400"}`}>
-                STEP 3
+              <span
+                className={`flex items-center justify-center w-8 h-8 rounded-full ${activeCard === "download" ? "bg-black text-white" : "bg-zinc-700 text-zinc-400"
+                  } font-bold text-sm`}
+              >
+                3
               </span>
             </div>
 
@@ -493,7 +556,7 @@ export default function Home() {
                 {downloadUrls.length > 0 && (
                   <div className="mt-6 p-4 bg-black/10 rounded-xl flex flex-col items-center space-y-3">
                     <p className="text-black font-bold">
-                      Your download{downloadUrls.length > 1 ? "s are" : " is"} ready!
+                      Your {audioFormat.toUpperCase()} download{downloadUrls.length > 1 ? "s are" : " is"} ready!
                     </p>
 
                     {downloadUrls.length === 1 ? (
@@ -507,7 +570,7 @@ export default function Home() {
                         ) : (
                           <Download size={18} />
                         )}
-                        <span>DOWNLOAD ZIP</span>
+                        <span>DOWNLOAD</span>
                       </button>
                     ) : (
                       <div className="space-y-2">

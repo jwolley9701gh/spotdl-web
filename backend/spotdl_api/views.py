@@ -245,6 +245,13 @@ class DownloadSongAPIView(APIView):
         if not url:
             return Response({"error": "URL is required"}, status=400)
 
+        audio_format = request.data.get("format")
+        if audio_format not in ["mp3", "m4a", "ogg"]:
+            return Response(
+                {"error": "Invalid audio format. Supported formats are mp3, m4a, ogg."},
+                status=400,
+            )
+
         # 1) Create DB record
         task_id = str(uuid.uuid4())
         DownloadTask.objects.create(id=task_id, url=url)
@@ -305,7 +312,7 @@ class DownloadSongAPIView(APIView):
                     "log_level": "DEBUG",
                     "cookie_file": cookie_path,
                     "bitrate": "auto",
-                    "format": "opus",
+                    "format": audio_format,
                     "generate_lrc": True,
                     "ffmpeg": ffmpeg_path,
                     "output": os.path.join(
@@ -341,7 +348,7 @@ class DownloadSongAPIView(APIView):
                 all_files = [
                     os.path.join(settings.MEDIA_ROOT, f)
                     for f in os.listdir(settings.MEDIA_ROOT)
-                    if f.endswith((".mp3", ".lrc", ".opus"))
+                    if f.endswith((".mp3", ".lrc", ".ogg", ".m4a"))
                 ]
                 batches = self.create_zip_batches(all_files)
 
