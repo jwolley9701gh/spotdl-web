@@ -26,7 +26,35 @@ type AudioFormat = "mp3" | "ogg" | "m4a"
 const SPOTIFY_URL_PATTERN =
   /^(https?:\/\/)?(open\.spotify\.com\/(track|album|playlist|artist)\/[a-zA-Z0-9]+|spotify:(track|album|playlist|artist):[a-zA-Z0-9]+)(\?.*)?$/
 const YOUTUBE_URL_PATTERN =
-  /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|music\.youtube\.com\/watch\?v=)[a-zA-Z0-9_-]+(&.*)?$/
+  /^(https?:\/\/)?((www|m)\.)?((youtube\.com\/watch\?v=)|(youtu\.be\/))([a-zA-Z0-9_-]+)(\?.*|&.*)?$/
+
+// Function to sanitize YouTube URL
+const sanitizeYoutubeUrl = (url: string): string => {
+  try {
+    // Handle youtu.be format
+    if (url.includes("youtu.be/")) {
+      const videoId = url.split("youtu.be/")[1].split(/[?&]/)[0]
+      return `https://www.youtube.com/watch?v=${videoId}`
+    }
+
+    // Handle youtube.com format
+    if (url.includes("youtube.com/watch")) {
+      // Make sure the URL has a protocol
+      const fullUrl = url.startsWith("http") ? url : `https://${url}`
+      const urlObj = new URL(fullUrl)
+      const videoId = urlObj.searchParams.get("v")
+      if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`
+      }
+    }
+
+    // If we couldn't parse it properly, return the original URL
+    return url
+  } catch (error) {
+    console.error("Error sanitizing YouTube URL:", error)
+    return url
+  }
+}
 
 export default function Home() {
   const [url, setUrl] = useState("")
@@ -157,8 +185,11 @@ export default function Home() {
         return
       }
 
+      // Sanitize YouTube URL to remove unnecessary parameters
+      const sanitizedYoutubeUrl = sanitizeYoutubeUrl(finalUrl)
+
       // Combine YouTube and Spotify URLs with a pipe character
-      finalUrl = `${url.trim()}|${spotifyUrl.trim()}`
+      finalUrl = `${sanitizedYoutubeUrl}|${spotifyUrl.trim()}`
     }
 
     setMessage("")

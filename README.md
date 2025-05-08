@@ -21,8 +21,6 @@ npm run dev
 ## Functionality
 - [ ] Support for downloading albums
 - [ ] More downloader options
-    - [ ] opus best audio
-    - [ ] allow ytmusic links input
 
 ## Error Handling
 - [ ] Some songs cannot be downloaded. Display the list of songs.
