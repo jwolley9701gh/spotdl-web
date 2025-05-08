@@ -55,7 +55,7 @@ def init_spotify_client():
         )
 
     except Exception as e:
-        logger.warning("SpotifyClient not re-initialised: %s", e)
+        logger.debug("SpotifyClient not re-initialised: %s", e)
 
 
 def clear_media_directory():
