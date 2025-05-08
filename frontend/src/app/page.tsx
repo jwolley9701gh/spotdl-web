@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import axios from "axios"
 import CookieUpload from "@/components/CookieUpload"
-import { Download, ArrowRight, Loader2, AlertCircle, AudioLines, Music, Check } from "lucide-react"
+import { Download, ArrowRight, Loader2, AlertCircle, AudioLines, Music, Check, Globe, ChevronDown } from "lucide-react"
 
 axios.defaults.withCredentials = true
 
@@ -21,6 +21,7 @@ interface TrackProgress {
 }
 
 type AudioFormat = "mp3" | "ogg" | "m4a"
+type MetadataLanguage = "en" | "ko" | "zh"
 
 // URL validation patterns
 const SPOTIFY_URL_PATTERN =
@@ -56,6 +57,13 @@ const sanitizeYoutubeUrl = (url: string): string => {
   }
 }
 
+// Language display names
+const languageOptions: Record<MetadataLanguage, { name: string }> = {
+  en: { name: "English" },
+  zh: { name: "Chinese" },
+  ko: { name: "Korean" },
+}
+
 export default function Home() {
   const [url, setUrl] = useState("")
   const [spotifyUrl, setSpotifyUrl] = useState("")
@@ -72,6 +80,8 @@ export default function Home() {
   const [urlError, setUrlError] = useState<string | null>(null)
   const [spotifyUrlError, setSpotifyUrlError] = useState<string | null>(null)
   const [audioFormat, setAudioFormat] = useState<AudioFormat>("mp3")
+  const [metadataLanguage, setMetadataLanguage] = useState<MetadataLanguage>("en")
+  const [useYoutubeMetadata, setUseYoutubeMetadata] = useState(false)
 
   // Fetch CSRF token once on mount
   useEffect(() => {
@@ -90,6 +100,7 @@ export default function Home() {
       setIsYoutubeUrl(false)
       setSpotifyUrl("")
       setSpotifyUrlError(null)
+      setUseYoutubeMetadata(false)
     }
   }, [url])
 
@@ -143,6 +154,16 @@ export default function Home() {
   // Handle format change
   const handleFormatChange = (format: AudioFormat) => {
     setAudioFormat(format)
+  }
+
+  // Handle language change
+  const handleLanguageChange = (language: MetadataLanguage) => {
+    setMetadataLanguage(language)
+  }
+
+  // Handle YouTube metadata toggle
+  const handleYoutubeMetadataToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUseYoutubeMetadata(e.target.checked)
   }
 
   // Handle form submit
@@ -202,6 +223,8 @@ export default function Home() {
         {
           url: finalUrl,
           format: audioFormat,
+          meta_lang: metadataLanguage,
+          use_ytm: isYoutubeUrl && useYoutubeMetadata,
         },
         {
           headers: {
@@ -337,10 +360,7 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "cookies" ? "text-black" : "text-white"}`}>
                 UPLOAD COOKIES
               </h2>
-              <span
-                className={`flex items-center justify-center w-8 h-8 rounded-full ${activeCard === "cookies" ? "bg-black text-white" : "bg-zinc-700 text-zinc-400"
-                  } font-bold text-sm`}
-              >
+              <span className={`font-bold text-xl ${activeCard === "cookies" ? "text-black" : "text-zinc-400"}`}>
                 1
               </span>
             </div>
@@ -374,12 +394,7 @@ export default function Home() {
           >
             <div className="flex justify-between items-start mb-4">
               <h2 className={`text-3xl font-bold ${activeCard === "url" ? "text-black" : "text-white"}`}>ENTER URL</h2>
-              <span
-                className={`flex items-center justify-center w-8 h-8 rounded-full ${activeCard === "url" ? "bg-black text-white" : "bg-zinc-700 text-zinc-400"
-                  } font-bold text-sm`}
-              >
-                2
-              </span>
+              <span className={`font-bold text-xl ${activeCard === "url" ? "text-black" : "text-zinc-400"}`}>2</span>
             </div>
 
             {activeCard === "url" ? (
@@ -414,6 +429,36 @@ export default function Home() {
                       </div>
                     )}
                   </div>
+
+                  {/* YouTube Metadata Option */}
+                  {isYoutubeUrl && (
+                    <div className="mt-4 p-4 bg-black/10 rounded-xl hidden">
+                      <div className="flex items-start">
+                        <div className="relative flex h-5 items-center">
+                          <input
+                            id="use-youtube-metadata"
+                            type="checkbox"
+                            checked={useYoutubeMetadata}
+                            onChange={handleYoutubeMetadataToggle}
+                            className="peer h-4 w-4 rounded border-black/30 border-2 bg-black/20 appearance-none focus:ring-black checked:bg-black checked:border-black"
+                          />
+                          <Check
+                            size={16}
+                            className="absolute left-0 text-white opacity-0 peer-checked:opacity-100 pointer-events-none"
+                          />
+                        </div>
+                        <div className="ml-3 text-sm">
+                          <label htmlFor="use-youtube-metadata" className="font-medium text-black">
+                            Use YouTube Music metadata
+                          </label>
+                          <p className="text-black/70">
+                            Use metadata from YouTube Music instead of Spotify. A Spotify URL is still required for
+                            fallback.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {isYoutubeUrl && (
                     <div className="mt-4">
@@ -489,6 +534,36 @@ export default function Home() {
                     </p>
                   </div>
 
+                  {/* Metadata Language Selection */}
+                  <div className="mt-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Globe className="h-4 w-4 text-black/70" />
+                      <label htmlFor="metadata-language" className="text-sm font-medium text-black/70">
+                        Metadata Language
+                      </label>
+                    </div>
+                    <div className="relative">
+                      <select
+                        id="metadata-language"
+                        value={metadataLanguage}
+                        onChange={(e) => handleLanguageChange(e.target.value as MetadataLanguage)}
+                        className="w-full p-3 pr-10 bg-black/20 border-2 border-black/30 rounded-xl text-black appearance-none focus:outline-none focus:border-black"
+                      >
+                        {(Object.keys(languageOptions) as MetadataLanguage[]).map((lang) => (
+                          <option key={lang} value={lang}>
+                            {languageOptions[lang].name}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <ChevronDown className="h-5 w-5 text-black/70" />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-black/70">
+                      Select your preferred language for song metadata (titles, artists, etc.)
+                    </p>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={!cookiesUploaded || !csrfToken || isLoading || (isYoutubeUrl && !spotifyUrl)}
@@ -545,10 +620,7 @@ export default function Home() {
               <h2 className={`text-3xl font-bold ${activeCard === "download" ? "text-black" : "text-white"}`}>
                 DOWNLOAD
               </h2>
-              <span
-                className={`flex items-center justify-center w-8 h-8 rounded-full ${activeCard === "download" ? "bg-black text-white" : "bg-zinc-700 text-zinc-400"
-                  } font-bold text-sm`}
-              >
+              <span className={`font-bold text-xl ${activeCard === "download" ? "text-black" : "text-zinc-400"}`}>
                 3
               </span>
             </div>

@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import threading
 import uuid
 import asyncio
@@ -19,20 +18,13 @@ from django.db.utils import IntegrityError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-
 from supabase import create_client
-from spotdl import SpotifyClient, Downloader
+from spotdl import Downloader
 from spotdl.types.options import DownloaderOptions
-from spotdl.types.song import Song
-from spotdl.types.playlist import Playlist
-from spotdl.types.album import Album
-from spotdl.types.artist import Artist
 from spotdl.download.progress_handler import ProgressHandler, SongTracker
 from spotdl.utils.search import parse_query
 
-from ytmusicapi import YTMusic
+from .spotify import CustomSpotifyClient
 from .models import DownloadSong, DownloadTask
 from .crypto import decrypt_bytes, encrypt_bytes
 
@@ -46,16 +38,17 @@ def get_supabase_client():
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
 
-def init_spotify_client():
+def init_spotify_client(language=None):
     try:
         # Initialize spotify client
-        SpotifyClient.init(
+        CustomSpotifyClient.init(
             client_id=settings.SPOTIFY_CLIENT_ID,
             client_secret=settings.SPOTIFY_CLIENT_SECRET,
+            language=language,
         )
 
     except Exception as e:
-        logger.debug("SpotifyClient not re-initialised: %s", e)
+        logger.warning("SpotifyClient not re-initialised: %s", e)
 
 
 def clear_media_directory():
@@ -209,10 +202,10 @@ def download_zip(request, zip_name):
 
 class DownloadSongAPIView(APIView):
     # TODO: client & server size checking of url & cookie file
-    def get_song_list(self, query):
+    def get_song_list(self, query, lang, use_ytm):
         logger.debug("Getting song list for query: %s", query)
-        init_spotify_client()
-        return parse_query([query])
+        init_spotify_client(lang)
+        return parse_query([query], use_ytm_data=use_ytm)
 
     def create_zip_batches(self, files):
         """Create zip batches for files, ensuring each batch is <= 50MB."""
@@ -252,12 +245,27 @@ class DownloadSongAPIView(APIView):
                 status=400,
             )
 
+        meta_lang = request.data.get("meta_lang")
+        logger.info("Preferred language: %s", meta_lang)
+        if meta_lang not in ["en", "ko", "zh"]:
+            return Response(
+                {"error": "Invalid meta_lang. Supported languages are en, ko, zh."},
+                status=400,
+            )
+
+        use_ytm = request.data.get("use_ytm", False)
+        if use_ytm not in [True, False]:
+            return Response(
+                {"error": "Invalid use_ytm. Supported values are True or False."},
+                status=400,
+            )
+
         # 1) Create DB record
         task_id = str(uuid.uuid4())
         DownloadTask.objects.create(id=task_id, url=url)
 
         # Get song metadata for frontend
-        song_list = self.get_song_list(url)
+        song_list = self.get_song_list(url, meta_lang, use_ytm)
         # convert to list of dicts
         group_songs = [
             {
@@ -313,6 +321,7 @@ class DownloadSongAPIView(APIView):
                     "cookie_file": cookie_path,
                     "bitrate": "auto",
                     "format": audio_format,
+                    "ytm_data": use_ytm,
                     "generate_lrc": True,
                     "ffmpeg": ffmpeg_path,
                     "output": os.path.join(
@@ -321,7 +330,7 @@ class DownloadSongAPIView(APIView):
                     "yt_dlp_args": f"--no-quiet --verbose",
                     "simple_tui": True,
                 }
-                init_spotify_client()
+                init_spotify_client(meta_lang)
 
                 downloader = Downloader(
                     settings=DownloaderOptions(**opts),

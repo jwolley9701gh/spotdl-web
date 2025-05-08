@@ -21,6 +21,7 @@ npm run dev
 ## Functionality
 - [ ] Support for downloading albums
 - [ ] More downloader options
+    - [ ] use_ytm_data
 
 ## Error Handling
 - [ ] Some songs cannot be downloaded. Display the list of songs.

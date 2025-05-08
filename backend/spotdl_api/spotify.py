@@ -1,4 +1,5 @@
 from spotdl import SpotifyClient
+import gc
 
 
 class CustomSpotifyClient(SpotifyClient):
@@ -8,7 +9,7 @@ class CustomSpotifyClient(SpotifyClient):
         client_id=None,
         client_secret=None,
         user_auth=False,
-        no_cache=False,
+        no_cache=True,
         headless=False,
         max_retries=3,
         use_cache_file=False,
@@ -16,9 +17,7 @@ class CustomSpotifyClient(SpotifyClient):
         cache_path=None,
         language=None,  # Add language parameter
     ):
-        # Check if an instance already exists
-        if hasattr(cls, "_instance") and cls._instance is not None:
-            return cls._instance
+        cls.destroy_instance()  # Destroy any existing instance
 
         # Call the SpotifyClient.init method directly
         instance = SpotifyClient.init(
@@ -36,7 +35,21 @@ class CustomSpotifyClient(SpotifyClient):
         # Set the language if provided
         if language:
             instance.language = language
+            SpotifyClient.language = language
 
         # Store the instance in the class
         cls._instance = instance
         return instance
+
+    @classmethod
+    def destroy_instance(cls):
+        """
+        Destroy the singleton instance of the Spotify client.
+        """
+        if hasattr(cls, "_instance") and cls._instance is not None:
+            del SpotifyClient._instance
+            del cls._instance
+            SpotifyClient._instance = None
+            cls._instance = None
+            # garbage collection
+            gc.collect()
