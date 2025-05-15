@@ -318,7 +318,7 @@ class DownloadSongAPIView(APIView):
                 ffmpeg_path = settings.FFMPEG_PATH if settings.FFMPEG_PATH else "ffmpeg"
                 opts = {
                     "log_level": "DEBUG",
-                    "cookie_file": cookie_path,
+                    # "cookie_file": cookie_path,
                     "bitrate": "auto",
                     "format": audio_format,
                     "ytm_data": use_ytm,
@@ -327,7 +327,7 @@ class DownloadSongAPIView(APIView):
                     "output": os.path.join(
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
                     ),
-                    "yt_dlp_args": f"--no-quiet --verbose",
+                    "yt_dlp_args": f"--no-quiet --verbose --cookies {cookie_path}",
                     "simple_tui": True,
                 }
                 init_spotify_client(meta_lang)

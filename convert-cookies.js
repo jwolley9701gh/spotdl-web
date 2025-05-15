@@ -2,6 +2,7 @@
  * @file Convert cookies copy/pasted from Chrome's Application -> Storage -> Cookies -> [domain] table,
  * into the Netscape cookies format used by tools like `curl` or `youtube-dl`.
  * Source: https://github.com/dandv/convert-chrome-cookies-to-netscape-format
+ * node convert-cookies.js file-with-cookies-copy-pasted-from-Chrome.txt > netscape-cookies.txt
  */
 const fs = require('fs');
 
