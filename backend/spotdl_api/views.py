@@ -25,6 +25,7 @@ from spotdl import Downloader
 from spotdl.types.options import DownloaderOptions
 from spotdl.download.progress_handler import ProgressHandler, SongTracker
 from spotdl.utils.search import parse_query
+from spotdl.providers.audio.base import AudioProviderError
 
 from .spotify import CustomSpotifyClient
 from .models import DownloadSong, DownloadTask
@@ -294,7 +295,7 @@ class DownloadSongAPIView(APIView):
                 )
 
         # sleep for 10 seconds to prevent rate limiting
-        time.sleep(10)
+        time.sleep(5)
 
         # 2) Start background job
         def download_job():
@@ -359,7 +360,16 @@ class DownloadSongAPIView(APIView):
                 )
 
                 # f) Perform the download (blocking)
-                downloader.download_multiple_songs(song_list)
+                for attempt in range(3):
+                    try:
+                        downloader.download_multiple_songs(song_list)
+                        break
+                    except AudioProviderError as e:
+                        wait = 5 * (2**attempt)
+                        logger.warning(f"Rate-limited, retrying in {wait}s…")
+                        time.sleep(wait)
+                else:
+                    raise
                 loop.stop()
 
                 # e) Gather downloaded files, create zip batches <= 50 MB
