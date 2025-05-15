@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+import time
 import uuid
 import asyncio
 import logging
@@ -292,6 +293,9 @@ class DownloadSongAPIView(APIView):
                     task_id=task_id, progress=0, message=""
                 )
 
+        # sleep for 10 seconds to prevent rate limiting
+        time.sleep(10)
+
         # 2) Start background job
         def download_job():
             cookie_path = None
@@ -332,7 +336,7 @@ class DownloadSongAPIView(APIView):
                     "output": os.path.join(
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
                     ),
-                    "yt_dlp_args": f"--no-quiet --verbose",
+                    "yt_dlp_args": f"--no-quiet --verbose --sleep-requests 5 --sleep-interval 5",
                     "simple_tui": True,
                 }
                 init_spotify_client(meta_lang)
