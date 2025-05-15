@@ -322,7 +322,6 @@ class DownloadSongAPIView(APIView):
                 # c) Initialize Spotdl in this thread
                 ffmpeg_path = settings.FFMPEG_PATH if settings.FFMPEG_PATH else "ffmpeg"
                 opts = {
-                    "audio_providers": ["youtube"],
                     "log_level": "DEBUG",
                     "cookie_file": cookie_path,
                     "bitrate": "auto",
