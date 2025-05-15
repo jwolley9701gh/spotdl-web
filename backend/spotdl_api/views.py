@@ -34,6 +34,16 @@ from .crypto import decrypt_bytes, encrypt_bytes
 logger = logging.getLogger("spotdl_api")
 logging.getLogger("spotdl").setLevel(logging.DEBUG)
 
+# Enable DEBUG logs for yt-dlp's YouTube extractor
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s %(name)s %(levelname)s %(message)s"
+)
+
+# 2) Lower‐level loggers for yt_dlp
+logging.getLogger("yt_dlp").setLevel(logging.DEBUG)
+logging.getLogger("yt_dlp.extractor").setLevel(logging.DEBUG)
+logging.getLogger("yt_dlp.extractor.youtube._video").setLevel(logging.DEBUG)
+
 # ─── Helpers ────────────────────────────────────────────────────────────────────
 
 
@@ -363,13 +373,10 @@ class DownloadSongAPIView(APIView):
                 for attempt in range(3):
                     try:
                         downloader.download_multiple_songs(song_list)
-                        break
                     except AudioProviderError as e:
                         wait = 5 * (2**attempt)
                         logger.warning(f"Rate-limited, retrying in {wait}s…")
                         time.sleep(wait)
-                else:
-                    raise
                 loop.stop()
 
                 # e) Gather downloaded files, create zip batches <= 50 MB
