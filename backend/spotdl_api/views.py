@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from supabase import create_client
+from storage3.exceptions import StorageApiError
 from spotdl import Downloader
 from spotdl.types.options import DownloaderOptions
 from spotdl.download.progress_handler import ProgressHandler, SongTracker
@@ -304,6 +305,10 @@ class DownloadSongAPIView(APIView):
                 )
                 data = decrypt_bytes(enc_data)
 
+                # Check first few lines of the cookie file
+                if not data.startswith(b"# Netscape HTTP Cookie File"):
+                    raise ValueError("Invalid cookie file format")
+
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
                 tmp.write(data)
                 tmp.flush()
@@ -317,8 +322,9 @@ class DownloadSongAPIView(APIView):
                 # c) Initialize Spotdl in this thread
                 ffmpeg_path = settings.FFMPEG_PATH if settings.FFMPEG_PATH else "ffmpeg"
                 opts = {
+                    "audio_providers": ["youtube"],
                     "log_level": "DEBUG",
-                    # "cookie_file": cookie_path,
+                    "cookie_file": cookie_path,
                     "bitrate": "auto",
                     "format": audio_format,
                     "ytm_data": use_ytm,
@@ -327,7 +333,7 @@ class DownloadSongAPIView(APIView):
                     "output": os.path.join(
                         settings.MEDIA_ROOT, "{artists} - {title}.{output-ext}"
                     ),
-                    "yt_dlp_args": f"--no-quiet --verbose --cookies {cookie_path}",
+                    "yt_dlp_args": f"--no-quiet --verbose",
                     "simple_tui": True,
                 }
                 init_spotify_client(meta_lang)
@@ -384,9 +390,19 @@ class DownloadSongAPIView(APIView):
                     download_urls=json.dumps(zip_names)
                 )
 
-            except Exception:
-                logger.exception("Download job failed")
+            except Exception as e:
+                logger.error("Error during download: %s", e, exc_info=True)
+                # Set task download_urls to []
+                DownloadTask.objects.filter(id=task_id).update(
+                    download_urls=json.dumps([])
+                )
+                # Mark all songs in the task as failed
+                for song in song_list:
+                    DownloadSong.objects.filter(
+                        sid=song.song_id, task_id=task_id
+                    ).update(progress=0, message=f"Error")
                 clear_media_directory()
+
             finally:
                 cleanup_spotdl_thread(downloader)
                 cleanup_local_cookie(cookie_path)
